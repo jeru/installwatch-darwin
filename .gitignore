@@ -1,0 +1,7 @@
+.*.swp
+.*.swo
+*.a
+*.dSYM/
+*.dylib
+*.o
+*.so
