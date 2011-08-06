@@ -27,8 +27,8 @@
 
 #include "localdecls.h"
 
-#ifndef	LIBDIR 
-	#define LIBDIR "/usr/local/lib"
+#ifndef	LIB
+	#define LIB "/usr/local/lib/installwatch.so"
 #endif
 
 #define TESTFILE "/tmp/installwatch-test"
@@ -44,9 +44,9 @@ void check_installwatch(void) {
 
 	time(NULL);
 
-	libc_handle=dlopen(LIBDIR"/installwatch.so",RTLD_LAZY);
+	libc_handle=dlopen(LIB,RTLD_LAZY);
 	if(!libc_handle) {
-		puts("Unable to open "LIBDIR"/installwatch.so");
+		puts("Unable to open "LIB);
 		exit(255);
 	}
 
@@ -163,7 +163,7 @@ void test_mkdir(void) {
 void test_open(void) {
 	int fd;
 
-	fd = open(TESTFILE, O_CREAT, O_RDWR, 0700);
+	fd = open(TESTFILE, O_CREAT | O_RDWR, 0700);
 	close(fd);
 	unlink(TESTFILE);
 }
@@ -204,7 +204,7 @@ void test_unlink(void) {
 	unlink(TESTFILE);
 }
 
-#if(GLIBC_MINOR >= 1)
+#ifdef INSTW_USE_LARGEFILE64
 
 void test_creat64(void) {
 	int fd;
@@ -287,21 +287,21 @@ int main(int argc, char **argv) {
 	puts("Testing installwatch " VERSION);
 	puts("Using " TESTFILE " and " TESTFILE2 " as a test files\n");
 	passed = failed = 0;
-	do_test("chmod", test_chmod, 4);
+	do_test("chmod", test_chmod, 3);
 	do_test("chown", test_chown, 3);
 	do_test("chroot", test_chroot, 1);
 	do_test("creat", test_creat, 2);
-#if(GLIBC_MINOR >= 1)
+#ifdef INSTW_USE_LARGEFILE64
 	do_test("creat64", test_creat64, 2);
 #endif
 	do_test("fchmod", test_fchmod, 3);
 	do_test("fchown", test_fchown, 3);
 	do_test("fopen",test_fopen,2);
-#if(GLIBC_MINOR >= 1)
+#ifdef INSTW_USE_LARGEFILE64
 	do_test("fopen64",test_fopen64,2);
 #endif	
 	do_test("ftruncate", test_ftruncate, 3);
-#if(GLIBC_MINOR >= 1)
+#ifdef INSTW_USE_LARGEFILE64
 	do_test("ftruncate64", test_ftruncate64, 3);
 #endif
 	do_test("lchown", test_lchown, 3);
@@ -309,14 +309,14 @@ int main(int argc, char **argv) {
 	do_test("mkdir", test_mkdir, 2);
 	/* do_test("mknod", test_mknod, 2); */
 	do_test("open", test_open, 2);
-#if(GLIBC_MINOR >= 1)
+#ifdef INSTW_USE_LARGEFILE64
 	do_test("open64", test_open64, 2);
 #endif
 	do_test("rename", test_rename, 3);
 	do_test("rmdir", test_mkdir, 2);
 	do_test("symlink", test_symlink, 4);
 	do_test("truncate", test_truncate, 3);
-#if(GLIBC_MINOR >= 1)
+#ifdef INSTW_USE_LARGEFILE64
 	do_test("truncate64", test_truncate64, 3);
 #endif
 	do_test("unlink", test_unlink, 2);

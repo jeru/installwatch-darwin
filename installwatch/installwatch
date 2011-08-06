@@ -14,6 +14,10 @@ if test "$PREFIX" = "$HACK" ; then
 	exit 1
 fi
 
+if `getopt -a -l 2> /dev/null`; then
+	INSTW_GNU_GETOPT=1
+fi
+
 LIBDIR=$PREFIX/lib
 
 BASE_TMP_DIR=/var/tmp
@@ -42,6 +46,9 @@ function usage() {
 	echo
 	echo "Usage: installwatch [options] [command [command arguments]]"
 	echo "Options:"
+	if [ "X$INSTW_GNU_GETOPT" = "X" ]; then
+		echo "WARNING: Due to getopt-posix, no long options are supported."
+	fi
 	echo
 	echo "-r, --root=<rootdir>           Sets the directory under which will be stored "
 	echo "                               meta-infos and translated files. "
@@ -117,11 +124,15 @@ function make_temp {
 #
 
 CKNAME=`basename $0`
+if [ "X$INSTW_GNU_GETOPT" != "X" ]; then
 PARAMS=`getopt -a -n $CKNAME -o +r:e:o:d:v:tb -l root:,transl:,backup:,exclude:,logfile:,dbgfile:,dbglvl:,help,version,copyright -- "$@"`
+else
+PARAMS=`getopt r:e:o:d:v:tb "$@"`
+fi
 
 [ $? -gt 0 ] && help_notice
 
-eval set -- $PARAMS
+eval "set -- $PARAMS"
 
 unset INSTW_ROOTPATH
 unset INSTW_TRANSL
@@ -331,8 +342,17 @@ fi
 # ##############################################################################
 #
 
-LD_PRELOAD="$LIBDIR/installwatch.so"
-export LD_PRELOAD
+if [ "X`uname`" = "XDarwin" ]; then
+	INSTW_LD=DYLD_INSERT_LIBRARIES
+	INSTW_SHLIB_SUFFIX=.dylib
+	INSTW_OTHER_SETTINGS="export DYLD_FORCE_FLAT_NAMESPACE=1"
+else
+	INSTW_LD=LD_PRELOAD
+	INSTW_SHLIB_SUFFIX=.so
+	INSTW_OTHER_SETTINGS=
+fi
+export $INSTW_LD="$LIBDIR/installwatch$INSTW_SHLIB_SUFFIX"
+eval "$INSTW_OTHER_SETTINGS"
 
 if [ $INSTW_DBGLVL -gt 0 ]; then 
    echo "debug: INSTW_EXCLUDE=${INSTW_EXCLUDE}"
@@ -342,7 +362,7 @@ if [ $INSTW_DBGLVL -gt 0 ]; then
    echo "debug: INSTW_DBGLVL=${INSTW_DBGLVL}"
 fi
 
-"$@"
+eval "$@"
 
 if [ $? -eq 0 ]; then
    FAIL=0
@@ -350,6 +370,9 @@ else
    FAIL=1
 fi
 
-unset LD_PRELOAD
+unset INSTW_SHLIB_SUFFIX
+unset INSTW_OTHER_SETTINGS
+unset $INSTW_LD
+unset INSTW_LD
 
 exit $FAIL
