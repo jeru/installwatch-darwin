@@ -2,6 +2,7 @@
 .*.swo
 *.a
 *.dSYM/
+*.cache/
 *.dylib
 *.o
 *.so

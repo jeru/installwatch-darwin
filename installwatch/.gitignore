@@ -1,2 +1,6 @@
 localdecls.h
 test-installwatch
+
+aclocal.m4
+configure
+ltmain.sh
