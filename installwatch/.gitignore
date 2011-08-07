@@ -4,3 +4,4 @@ test-installwatch
 aclocal.m4
 configure
 ltmain.sh
+Makefile.in

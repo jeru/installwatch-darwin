@@ -29,26 +29,72 @@
  * Port to Darwin.
  */
 
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <dlfcn.h>
-#include <syslog.h>
-#include <errno.h>
-#include <unistd.h>
-#include <libgen.h>
-#undef basename
-#include <string.h>
-#include <time.h>
-#include <utime.h>
-#include <dlfcn.h>
-#include <dirent.h>
+#include "config.h"
 
-#include "localdecls.h"
+#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
+
+#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+
+#ifdef HAVE_SYS_STAT_H
+#include <sys/stat.h>
+#endif
+
+#ifdef HAVE_FCNTL_H
+#include <fcntl.h>
+#endif
+
+#ifdef HAVE_STDARG_H
+#include <stdarg.h>
+#endif
+
+#ifdef HAVE_STDIO_H
+#include <stdio.h>
+#endif
+
+#ifdef HAVE_STDLIB_H
+#include <stdlib.h>
+#endif
+
+#ifdef HAVE_DLFCN_H
+#include <dlfcn.h>
+#endif
+
+#ifdef HAVE_SYSLOG_H
+#include <syslog.h>
+#endif
+
+#ifdef HAVE_ERRNO_H
+#include <errno.h>
+#endif
+
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+
+#ifdef HAVE_LIBGEN_H
+#include <libgen.h>
+#endif
+
+#undef basename
+#ifdef HAVE_STRING_H
+#include <string.h>
+#endif
+
+#ifdef HAVE_TIME_H
+#include <time.h>
+#endif
+
+#ifdef HAVE_UTIME_H
+#include <utime.h>
+#endif
+
+#ifdef HAVE_DIRENT_H
+#include <dirent.h>
+#endif
 
 #define DEBUG 1  
 
@@ -72,7 +118,7 @@ static int (*true_creat)(const char *, mode_t);
 static int (*true_fchmod)(int, mode_t);
 static int (*true_fchown)(int, uid_t, gid_t);
 static FILE *(*true_fopen)(const char *,const char*);
-static int (*true_ftruncate)(int, TRUNCATE_T);
+static int (*true_ftruncate)(int, off_t);
 static char *(*true_getcwd)(char*,size_t);
 static int (*true_lchown)(const char *, uid_t, gid_t);
 static int (*true_link)(const char *, const char *);
@@ -105,7 +151,7 @@ static int (*true_scandir)(	const char *,struct dirent ***,
 				int (*)(const struct dirent *),
 				int (*)(const void *,const void *));
 static int (*true_symlink)(const char *, const char *);
-static int (*true_truncate)(const char *, TRUNCATE_T);
+static int (*true_truncate)(const char *, off_t);
 static int (*true_unlink)(const char *);
 static int (*true_utime)(const char *,const struct utimbuf *);
 static int (*true_utimes)(const char *,const struct timeval *);
@@ -2417,7 +2463,7 @@ FILE *fopen(const char *pathname, const char *mode) {
 	return result;
 }
 
-int ftruncate(int fd, TRUNCATE_T length) {
+int ftruncate(int fd, off_t length) {
 	int result;
 
 	REFCOUNT;
@@ -3104,7 +3150,7 @@ int symlink(const char *pathname, const char *slink) {
 	return result;
 }
 
-int truncate(const char *path, TRUNCATE_T length) {
+int truncate(const char *path, off_t length) {
 	int result;
 	instw_t instw;
 

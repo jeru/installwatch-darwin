@@ -1,4 +1,5 @@
 AC_INIT([installwatch-port], [0.7.0beta5])
+AM_INIT_AUTOMAKE
 
 
 ######################
@@ -11,6 +12,7 @@ AC_PROG_EGREP
 AC_PROG_INSTALL
 AC_PROG_MKDIR_P
 AC_PROG_SED
+AC_PROG_LIBTOOL
 
 AC_CHECK_TOOL([OTOOL], [otool], [:])
 AC_CHECK_TOOL([LDD], [ldd], [:])
@@ -25,16 +27,23 @@ fi
 
 AC_CHECK_HEADERS([ \
 	sys/param.h \
-	sys/types.h \
 	sys/stat.h \
+	sys/types.h \
 	dirent.h \
 	dlfcn.h \
 	errno.h \
 	fcntl.h \
+	libgen.h \
+	stdarg.h \
 	stdio.h \
+	stdlib.h \
+	string.h \
 	time.h \
 	unistd.h \
 	utime.h \
+])
+AC_CHECK_HEADERS([ \
+	syslog.h \
 ])
 
 
@@ -135,4 +144,9 @@ AC_CHECK_FUNCS([ \
 ##########
 
 AC_CONFIG_HEADERS([include/config.h])
+AC_CONFIG_FILES([
+	Makefile
+	src/Makefile
+	tests/Makefile
+])
 AC_OUTPUT
