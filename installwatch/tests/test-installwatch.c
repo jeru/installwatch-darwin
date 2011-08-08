@@ -25,7 +25,7 @@
 #include <time.h>
 #include <dlfcn.h>
 
-#include "localdecls.h"
+#include "config.h"
 
 #ifndef	LIB
 	#define LIB "/usr/local/lib/installwatch.so"

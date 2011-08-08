@@ -182,12 +182,6 @@ static int (*true_truncate64)(const char *, __off64_t);
 
 #endif
 
-#if defined __GNUC__ && __GNUC__>=2
-	#define inline inline
-#else
-	#define inline
-#endif	
-
 /* If there is no __xstat, just import symbol "stat" in initialize() */
 #ifdef INSTW_HAS_XSTAT
 int true_stat_impl(const char *pathname,struct stat *info) {
@@ -443,11 +437,11 @@ static void initialize(void) {
 	if(instw_init()) exit(-1);
 }
 
-void _init(void) {
+void __attribute ((constructor)) init_function(void) {
 	initialize();
 }
 
-void _fini(void) {
+void __attribute ((destructor)) fini_function(void) {
 	instw_fini();	
 }
 
@@ -567,11 +561,11 @@ static inline int debug(int dbglvl,const char *format,...) {
  *      --We try to canonicalize as much as possible, considering that 
  * /
  */
-static int canonicalize(const char *path, char *resolved_path) {
+int canonicalize(const char *path, char *resolved_path) {
 
 	unset_okwrap();
 
-	if(!realpath(path,resolved_path)) {
+	if(!true_realpath(path,resolved_path)) {
 		if((path[0] != '/')) {
 			/* The path could not be canonicalized, append it
 		 	 * to the current working directory if it was not 
