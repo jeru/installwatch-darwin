@@ -144,22 +144,34 @@ static int (*true_truncate64)(const char *, __off64_t);
 
 /* If there is no __xstat, just import symbol "stat" in initialize() */
 #ifdef INSTW_HAS_XSTAT
-int true_stat_impl(const char *pathname,struct stat *info) {
+static int true_stat_impl(const char *pathname,struct stat *info) {
 	return true_xstat(_STAT_VER,pathname,info);
 }
 #endif
 
 /* If there is no __xmknod, just import symbol "mknod" in initialize() */
 #ifdef INSTW_HAS_XSTAT
-int true_mknod_impl(const char *pathname,mode_t mode,dev_t dev) {
+static int true_mknod_impl(const char *pathname,mode_t mode,dev_t dev) {
 	return true_xmknod(_MKNOD_VER,pathname,mode,&dev);
 }
 #endif
 
 /* If there is no __lxstat, just import symbol "lstat" in initialize() */
 #ifdef INSTW_HAS_LXSTAT
-int true_lstat_impl(const char *pathname,struct stat *info) {
+static int true_lstat_impl(const char *pathname,struct stat *info) {
 	return true_lxstat(_STAT_VER,pathname,info);
+}
+#endif
+
+#if defined(INSTW_HAS_XSTAT) && defined(INSTW_USE_LARGEFILE64)
+static int true_stat64_impl(const char *pathname, struct stat64* info) {
+    return true_xstat64(_STAT_VER, pathname, info);
+}
+#endif
+
+#if defined(INSTW_HAS_LXSTAT) && defined(INSTW_USE_LARGEFILE64)
+static int true_lstat64_impl(const char *pathname, struct stat64* info) {
+    return true_lxstat64(_STAT_VER, pathname, info);
 }
 #endif
 
