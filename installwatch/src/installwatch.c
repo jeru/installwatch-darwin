@@ -109,78 +109,8 @@ int __installwatch_timecount = 0;
 #define REFCOUNT __installwatch_refcount++
 #define TIMECOUNT __installwatch_timecount++
 
-static time_t (*true_time) (time_t *);
-static int (*true_chdir)(const char *);
-static int (*true_chmod)(const char *, mode_t);
-static int (*true_chown)(const char *, uid_t, gid_t);
-static int (*true_chroot)(const char *);
-static int (*true_creat)(const char *, mode_t);
-static int (*true_fchmod)(int, mode_t);
-static int (*true_fchown)(int, uid_t, gid_t);
-static FILE *(*true_fopen)(const char *,const char*);
-static int (*true_ftruncate)(int, off_t);
-static char *(*true_getcwd)(char*,size_t);
-static int (*true_lchown)(const char *, uid_t, gid_t);
-static int (*true_link)(const char *, const char *);
-static int (*true_mkdir)(const char *, mode_t);
-static int (*true_mknod)(const char *, mode_t, dev_t);
-
-#ifdef INSTW_HAS_XMKNOD
-static int (*true_xmknod)(int ver,const char *, mode_t, dev_t *);
-#endif
-
-static int (*true_open)(const char *, int, ...);
-static DIR *(*true_opendir)(const char *);
-static struct dirent *(*true_readdir)(DIR *dir);
-static int (*true_readlink)(const char*,char *,size_t);
-static char *(*true_realpath)(const char *,char *);
-static int (*true_rename)(const char *, const char *);
-static int (*true_rmdir)(const char *);
-static int (*true_stat)(const char *,struct stat *);
-static int (*true_lstat)(const char *,struct stat *);
-
-#ifdef INSTW_HAS_XSTAT
-static int (*true_xstat)(int,const char *,struct stat *);
-#endif
-
-#ifdef INSTW_HAS_LXSTAT
-static int (*true_lxstat)(int,const char *,struct stat *);
-#endif
-
-static int (*true_scandir)(	const char *,struct dirent ***,
-				int (*)(const struct dirent *),
-				int (*)(const void *,const void *));
-static int (*true_symlink)(const char *, const char *);
-static int (*true_truncate)(const char *, off_t);
-static int (*true_unlink)(const char *);
-static int (*true_utime)(const char *,const struct utimbuf *);
-static int (*true_utimes)(const char *,const struct timeval *);
-static int (*true_access)(const char *, int);
-
-#ifdef INSTW_USE_LARGEFILE64
-
-static int (*true_creat64)(const char *, __mode_t);
-static FILE *(*true_fopen64)(const char *,const char *);
-static int (*true_ftruncate64)(int, __off64_t);
-static int (*true_open64)(const char *, int, ...);
-static struct dirent64 *(*true_readdir64)(DIR *dir);
-static int (*true_scandir64)(	const char *,struct dirent64 ***,
-				int (*)(const struct dirent64 *),
-				int (*)(const void *,const void *));
-static int (*true_stat64)(const char *, struct stat64 *);
-static int (*true_lstat64)(const char *, struct stat64 *);
-
-#	ifdef INSTW_HAS_XSTAT
-static int (*true_xstat64)(int,const char *, struct stat64 *);
-#	endif
-
-#	ifdef INSTW_HAS_LXSTAT
-static int (*true_lxstat64)(int,const char *, struct stat64 *);
-#	endif
-
-static int (*true_truncate64)(const char *, __off64_t);
-
-#endif
+static void *libc_handle=NULL;
+static void initialize(void);
 
 /* If there is no __xstat, just import symbol "stat" in initialize() */
 #ifdef INSTW_HAS_XSTAT
@@ -193,13 +123,6 @@ int true_stat_impl(const char *pathname,struct stat *info) {
 #ifdef INSTW_HAS_XSTAT
 int true_mknod_impl(const char *pathname,mode_t mode,dev_t dev) {
 	return true_xmknod(_MKNOD_VER,pathname,mode,&dev);
-}
-#endif
-
-/* If there is no __lxstat, just import symbol "lstat" in initialize() */
-#ifdef INSTW_HAS_LXSTAT
-int true_lstat_impl(const char *pathname,struct stat *info) {
-	return true_lxstat(_STAT_VER,pathname,info);
 }
 #endif
 
@@ -347,11 +270,1400 @@ static inline int debug(int dbglvl,const char *format,...)
 #define reset_okwrap() (__instw.gstatus |= INSTW_OKWRAP)
 
 /*
+ * Injected functions: original function pointers.
+ */
+#ifdef HAVE_ACCESS
+static int (*true_access)(const char *, int);
+#endif
+#ifdef HAVE_CHDIR
+static int (*true_chdir)(const char *);
+#endif
+#ifdef HAVE_CHMOD
+static int (*true_chmod)(const char *, mode_t);
+#endif
+#ifdef HAVE_CHOWN
+static int (*true_chown)(const char *, uid_t, gid_t);
+#endif
+#ifdef HAVE_CHROOT
+static int (*true_chroot)(const char *);
+#endif
+#ifdef HAVE_CREAT
+static int (*true_creat)(const char *, mode_t);
+#endif
+#ifdef HAVE_CREAT64
+static int (*true_creat64)(const char *, __mode_t);
+#endif
+#ifdef HAVE_FCHMOD
+static int (*true_fchmod)(int, mode_t);
+#endif
+#ifdef HAVE_FCHOWN
+static int (*true_fchown)(int, uid_t, gid_t);
+#endif
+#ifdef HAVE_FOPEN
+static FILE *(*true_fopen)(const char *,const char*);
+#endif
+#ifdef HAVE_FOPEN64
+static FILE *(*true_fopen64)(const char *,const char *);
+#endif
+#ifdef HAVE_FTRUNCATE
+static int (*true_ftruncate)(int, off_t);
+#endif
+#ifdef HAVE_FTRUNCATE64
+static int (*true_ftruncate64)(int, __off64_t);
+#endif
+#ifdef HAVE_GETCWD
+static char *(*true_getcwd)(char*,size_t);
+#endif
+#ifdef HAVE_LCHOWN
+static int (*true_lchown)(const char *, uid_t, gid_t);
+#endif
+#ifdef HAVE_LINK
+static int (*true_link)(const char *, const char *);
+#endif
+#ifdef HAVE_LSTAT
+static int (*true_lstat)(const char *,struct stat *);
+#endif
+#ifdef HAVE_LSTAT64
+static int (*true_lstat64)(const char *, struct stat64 *);
+#endif
+#ifdef HAVE_MKDIR
+static int (*true_mkdir)(const char *, mode_t);
+#endif
+#ifdef HAVE_MKNOD
+static int (*true_mknod)(const char *, mode_t, dev_t);
+#endif
+#ifdef HAVE_OPEN
+static int (*true_open)(const char *, int, ...);
+#endif
+#ifdef HAVE_OPEN64
+static int (*true_open64)(const char *, int, ...);
+#endif
+#ifdef HAVE_OPENDIR
+static DIR *(*true_opendir)(const char *);
+#endif
+#ifdef HAVE_READDIR
+static struct dirent *(*true_readdir)(DIR *dir);
+#endif
+#ifdef HAVE_READDIR64
+static struct dirent64 *(*true_readdir64)(DIR *dir);
+#endif
+#ifdef HAVE_READLINK
+static int (*true_readlink)(const char*,char *,size_t);
+#endif
+#ifdef HAVE_REALPATH
+static char *(*true_realpath)(const char *,char *);
+#endif
+#ifdef HAVE_RENAME
+static int (*true_rename)(const char *, const char *);
+#endif
+#ifdef HAVE_RMDIR
+static int (*true_rmdir)(const char *);
+#endif
+#ifdef HAVE_SCANDIR
+static int (*true_scandir)(	const char *,struct dirent ***,
+				int (*)(const struct dirent *),
+				int (*)(const void *,const void *));
+#endif
+#ifdef HAVE_SCANDIR64
+static int (*true_scandir64)(	const char *,struct dirent64 ***,
+				int (*)(const struct dirent64 *),
+				int (*)(const void *,const void *));
+#endif
+#ifdef HAVE_STAT
+static int (*true_stat)(const char *,struct stat *);
+#endif
+#ifdef HAVE_STAT64
+static int (*true_stat64)(const char *, struct stat64 *);
+#endif
+#ifdef HAVE_SYMLINK
+static int (*true_symlink)(const char *, const char *);
+#endif
+#ifdef HAVE_TIME
+static time_t (*true_time) (time_t *);
+#endif
+#ifdef HAVE_TRUNCATE
+static int (*true_truncate)(const char *, off_t);
+#endif
+#ifdef HAVE_TRUNCATE64
+static int (*true_truncate64)(const char *, __off64_t);
+#endif
+#ifdef HAVE_UNLINK
+static int (*true_unlink)(const char *);
+#endif
+#ifdef HAVE_UTIME
+static int (*true_utime)(const char *,const struct utimbuf *);
+#endif
+#ifdef HAVE_UTIMES
+static int (*true_utimes)(const char *,const struct timeval *);
+#endif
+#ifdef HAVE___FXSTAT
+static int (*true_fxstat)(int,int fd,struct stat *);
+#endif
+#ifdef HAVE___LXSTAT
+static int (*true_lxstat)(int,const char *,struct stat *);
+#endif
+#ifdef HAVE___LXSTAT64
+static int (*true_lxstat64)(int,const char *, struct stat64 *);
+#endif
+#ifdef HAVE___XMKNOD
+static int (*true_xmknod)(int ver,const char *, mode_t, dev_t *);
+#endif
+#ifdef HAVE___XSTAT
+static int (*true_xstat)(int,const char *,struct stat *);
+#endif
+#ifdef HAVE___XSTAT64
+static int (*true_xstat64)(int,const char *, struct stat64 *);
+#endif
+
+/*
+ * Injected functions implementation.
+ */
+
+#ifdef HAVE_ACCESS
+int access (const char *pathname, int type) {
+       int result;
+       instw_t instw;
+
+       if (!libc_handle)
+          initialize();
+
+#if DEBUG
+       debug(2,"access(%s,%d)\n",pathname,type);
+#endif
+
+         /* We were asked to work in "real" mode */
+       if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+           !(__instw.gstatus & INSTW_OKWRAP) ) {
+               result=true_access(pathname,type);
+               return result;
+       }
+
+       instw_new(&instw);
+       instw_setpath(&instw,pathname);
+
+#if DEBUG
+       instw_print(&instw);
+#endif
+
+       backup(instw.truepath);
+       instw_apply(&instw);
+
+       result=true_access(instw.translpath,type);
+       instw_log("%d\taccess\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+       instw_delete(&instw);
+
+       return result;
+}
+#endif  /* HAVE_ACCESS */
+
+#ifdef HAVE_CHDIR
+int chdir(const char *pathname) {
+	int result;
+	instw_t instw;
+	int status;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"chdir(%s)n",pathname);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_chdir(pathname);
+		return result;
+	}    
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	instw_getstatus(&instw,&status);
+
+	if(status&INSTW_TRANSLATED && !(status&INSTW_ISINROOT)) {
+		result=true_chdir(instw.translpath);
+		debug(3,"\teffective chdir(%s)\n",instw.translpath);
+	} else {
+		result=true_chdir(pathname);
+		debug(3,"\teffective chdir(%s)\n",pathname);
+	}
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_CHDIR */
+
+#ifdef HAVE_CHOWN
+int chown(const char *path, uid_t owner, gid_t group) {
+	int result;
+	instw_t instw;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"chown(%s,owner,group)\n",path);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_chown(path,owner,group);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,path);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	backup(instw.truepath);
+	instw_apply(&instw);
+
+	result=true_chown(instw.translpath,owner,group);
+	instw_log("%d\tchown\t%s\t%d\t%d\t#%s\n",result,
+	    instw.reslvpath,owner,group,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_CHOWN */
+
+#ifdef HAVE_CHROOT
+int chroot(const char *path) {
+	int result;
+	char canonic[MAXPATHLEN];
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"chroot(%s)\n",path);
+#endif
+
+	canonicalize(path, canonic);
+	result = true_chroot(path);
+	  /*
+	   * From now on, another log file will be written if 
+	   * INSTW_LOGFILE is set                          
+	   */
+	instw_log("%d\tchroot\t%s\t#%s\n", result, canonic, error(result));
+	return result;
+}
+#endif  /* HAVE_CHROOT */
+
+#ifdef HAVE_CREAT
+int creat(const char *pathname, mode_t mode) {
+/* Is it a system call? */
+	int result;
+	instw_t instw;
+	
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"creat(%s,mode)\n",pathname);
+#endif
+	
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_creat(pathname,mode);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	backup(instw.truepath);
+	instw_apply(&instw);
+
+	result = true_open(instw.translpath,O_CREAT|O_WRONLY|O_TRUNC,mode);
+	instw_log("%d\tcreat\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_CREAT */
+
+#ifdef HAVE_CREAT64
+int creat64(const char *pathname, __mode_t mode) {
+/* Is it a system call? */
+	int result;
+	instw_t instw;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"creat64(%s,mode)\n",pathname);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_creat64(pathname,mode);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	backup(instw.truepath);
+	instw_apply(&instw);
+
+	result=true_open64(instw.translpath,O_CREAT | O_WRONLY | O_TRUNC, mode);
+	instw_log("%d\tcreat\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_CREAT64 */
+
+#ifdef HAVE_FCHMOD
+int fchmod(int filedes, mode_t mode) {
+	int result;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"fchmod\n");
+#endif
+
+	result = true_fchmod(filedes, mode);
+	instw_log("%d\tfchmod\t%d\t0%04o\t#%s\n",result,filedes,mode,error(result));
+	return result;
+}
+#endif  /* HAVE_FCHMOD */
+
+#ifdef HAVE_FCHOWN
+int fchown(int fd, uid_t owner, gid_t group) {
+	int result;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"fchown\n");
+#endif
+
+	result = true_fchown(fd, owner, group);
+	instw_log("%d\tfchown\t%d\t%d\t%d\t#%s\n",result,fd,owner,group,error(result));
+	return result;
+}
+#endif  /* HAVE_FCHOWN */
+
+#ifdef HAVE_FOPEN
+FILE *fopen(const char *pathname, const char *mode) {
+	FILE *result;
+	instw_t instw;
+	int status=0;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"fopen(%s,%s)\n",pathname,mode);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_fopen(pathname,mode);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') {
+		backup(instw.truepath);
+		instw_apply(&instw);
+		instw_log("%d\tfopen\t%s\t#%s\n",(int)result,
+		    instw.reslvpath,error(result));
+	}
+
+	instw_getstatus(&instw,&status);
+	
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective fopen(%s)",instw.translpath);
+		result=true_fopen(instw.translpath,mode); 
+	} else {
+		debug(4,"\teffective fopen(%s)",instw.path);
+		result=true_fopen(instw.path,mode);
+	}
+	
+	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') 
+		instw_log("%d\tfopen\t%s\t#%s\n",(int)result,
+		    instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_FOPEN */
+
+#ifdef HAVE_FOPEN64
+FILE *fopen64(const char *pathname, const char *mode) {
+	FILE *result;
+	instw_t instw;
+	int status;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"fopen64(%s,%s)\n",pathname,mode);
+#endif
+	
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_fopen64(pathname,mode);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') {
+		backup(instw.truepath);
+		instw_apply(&instw);
+	}
+
+	instw_getstatus(&instw,&status);
+	
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective fopen64(%s)",instw.translpath);
+		result=true_fopen64(instw.translpath,mode); 
+	} else {
+		debug(4,"\teffective fopen64(%s)",instw.path);
+		result=true_fopen64(instw.path,mode);
+	}
+
+	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') 
+		instw_log("%d\tfopen64\t%s\t#%s\n",(int)result,
+		    instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_FOPEN64 */
+
+#ifdef HAVE_FTRUNCATE
+int ftruncate(int fd, off_t length) {
+	int result;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"ftruncate\n");
+#endif
+
+	result = true_ftruncate(fd, length);
+	instw_log("%d\tftruncate\t%d\t%d\t#%s\n",result,fd,(int)length,error(result));
+	return result;
+}
+#endif  /* HAVE_FTRUNCATE */
+
+#ifdef HAVE_FTRUNCATE64
+int ftruncate64(int fd, __off64_t length) {
+	int result;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"ftruncate64\n");
+#endif
+
+	result = true_ftruncate64(fd, length);
+	instw_log("%d\tftruncate\t%d\t%d\t#%s\n",result,fd,(int)length,error(result));
+	return result;
+}
+#endif  /* HAVE_FTRUNCATE64 */
+
+#ifdef HAVE_GETCWD
+char *getcwd(char *buffer,size_t size) {
+	char wpath[PATH_MAX+1];
+	char *result;
+	char *wptr;
+	size_t wsize;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"getcwd(%p,%ld)\n",buffer,(long int)size);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_getcwd(buffer,size);
+		return result;
+	}
+
+	if(	__instw.gstatus&INSTW_INITIALIZED &&
+		__instw.gstatus&INSTW_OKTRANSL && 
+		(NULL!=(result=true_getcwd(wpath,sizeof(wpath)))) ) {
+		  /* we untranslate any translated path */
+		if(strstr(wpath,__instw.transl)==wpath)	{
+			wptr=wpath+strlen(__instw.transl);
+			wsize=strlen(wptr)+1;
+		} else {
+			wptr=wpath;
+			wsize=strlen(wptr)+1;
+		}
+
+		if (buffer == NULL) {
+			if (size !=0 && size < wsize) {
+				result=NULL;
+				errno=(size<=0?EINVAL:ERANGE);
+			} else {
+				result=malloc(wsize);
+				if(result == NULL) {
+					errno=ENOMEM;
+				} else {
+					strcpy(result,wptr);
+				}
+			}
+		} else {
+			if(size>=wsize) {
+				strcpy(buffer,wptr);
+			} else {
+				result=NULL;
+				errno=(size<=0?EINVAL:ERANGE);
+			}
+		}
+	} else  {
+		result=true_getcwd(buffer,size);
+	}
+
+#if DEBUG
+	debug(3,"\teffective getcwd(%s,%ld)\n",
+	      (result?buffer:"(null)"),(long int)size);
+#endif	
+
+	return result;
+}
+#endif  /* HAVE_GETCWD */
+
+#ifdef HAVE_LCHOWN
+int lchown(const char *path, uid_t owner, gid_t group) {
+/* Linux specific? */
+	int result;
+	instw_t instw;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"lchown(%s,owner,group)\n",path);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_lchown(path,owner,group);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,path);
+	
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	backup(instw.truepath);
+	instw_apply(&instw);
+
+	result=true_lchown(instw.translpath,owner,group);
+	instw_log("%d\tlchown\t%s\t%d\t%d\t#%s\n",result,
+	    instw.reslvpath,owner,group,error(result));
+	    
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_LCHOWN */
+
+#ifdef HAVE_LINK
+int link(const char *oldpath, const char *newpath) {
+	int result;
+	instw_t instw_o;
+	instw_t instw_n;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"link(%s,%s)\n",oldpath,newpath);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_link(oldpath,newpath);
+		return result;
+	}
+
+	instw_new(&instw_o);
+	instw_new(&instw_n);
+	instw_setpath(&instw_o,oldpath);
+	instw_setpath(&instw_n,newpath);
+
+#if DEBUG
+	instw_print(&instw_o);
+	instw_print(&instw_n);
+#endif
+
+	backup(instw_o.truepath);
+	instw_apply(&instw_o);
+	instw_apply(&instw_n);
+	
+	result=true_link(instw_o.translpath,instw_n.translpath);
+	instw_log("%d\tlink\t%s\t%s\t#%s\n",result,
+	    instw_o.reslvpath,instw_n.reslvpath,error(result));
+	    
+	instw_delete(&instw_o);
+	instw_delete(&instw_n);
+
+	return result;
+}
+#endif  /* HAVE_LINK */
+
+#ifdef HAVE_LSTAT
+#   ifdef HAVE___XLSTAT
+int true_lstat_impl(const char *pathname,struct stat *info) {
+	return true_lxstat(_STAT_VER,pathname,info);
+}
+#   endif
+
+int lstat(const char *pathname,struct stat *info)
+{
+	int result;
+	instw_t instw;
+	int status;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"lstat(%s,%p)\n",pathname,info);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_lstat(pathname,info);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	instw_getstatus(&instw,&status);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective lstat(%s,%p)\n",
+		      instw.translpath,info);
+		result=true_lstat(instw.translpath,info);
+	} else {
+		debug(4,"\teffective lstat(%s,%p)\n",
+		      instw.path,info);
+		result=true_lstat(instw.path,info);
+	}
+
+	instw_delete(&instw);
+
+	return result;	
+}
+#endif  /* HAVE_LSTAT */
+
+#ifdef HAVE_LSTAT64
+#   ifdef HAVE___XLSTAT64
+int true_lstat64_impl(const char *pathname,struct stat64 *info) {
+	return true_lxstat64(_STAT_VER,pathname,info);
+}
+#   endif
+
+int lstat64(const char *pathname,struct stat64 *info) {
+	int result;
+	instw_t instw;
+	int status;
+
+#if DEBUG
+	debug(2,"lstat64(%s,%p)\n",pathname,info);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_lstat64(pathname,info);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	instw_getstatus(&instw,&status);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective lstat64(%s,%p)\n",
+			instw.translpath,info);
+		result=true_lstat64(instw.translpath,info);
+	} else {
+		debug(4,"\teffective lstat64(%s,%p)\n",
+			instw.path,info);
+		result=true_lstat64(instw.path,info);
+	}
+
+	instw_delete(&instw);
+
+	return result;	
+}
+#endif  /* HAVE_LSTAT64 */
+
+#ifdef HAVE_MKDIR
+int mkdir(const char *pathname, mode_t mode) {
+	int result;
+	instw_t instw;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"mkdir(%s,mode)\n",pathname);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_mkdir(pathname,mode);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	instw_apply(&instw);
+
+	result=true_mkdir(instw.translpath,mode);
+	instw_log("%d\tmkdir\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_MKDIR */
+
+#ifdef HAVE_MKNOD
+#   ifdef HAVE___XMKNOD
+int true_mknod_impl(const char* pathname, mode_t mode, dev_t dev) {
+    return true_xmknod(_MKNOD_VER, pathname, mode, dev);
+}
+#   endif
+
+int mknod(const char *pathname, mode_t mode,dev_t dev)
+{
+	int result;
+	instw_t instw;
+	
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"mknod(%s,mode,dev)\n",pathname);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_mknod(pathname,mode,dev);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	instw_apply(&instw);
+	backup(instw.truepath);
+
+	result=true_mknod(instw.translpath,mode,dev);
+	instw_log("%d\tmknod\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+	
+	return result;
+}
+#endif  /* HAVE_MKNOD */
+
+#ifdef HAVE_OPEN
+int open(const char *pathname, int flags, ...) {
+/* Eventually, there is a third parameter: it's mode_t mode */
+	va_list ap;
+	mode_t mode;
+	int result;
+	instw_t instw;
+	int status;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"open(%s,%d,mode)\n",pathname,flags);
+#endif
+
+	if (flags & O_CREAT) {
+		va_start(ap, flags);
+#ifdef __APPLE__
+		/* Apple uses int to hold the mode_t variadic. */
+		mode = va_arg(ap, int);
+#else
+		mode = va_arg(ap, mode_t);
+#endif
+		va_end(ap);
+	} else {
+		mode = 0;
+	}
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_open(pathname,flags,mode);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(flags & (O_WRONLY | O_RDWR)) {
+		backup(instw.truepath);
+		instw_apply(&instw);
+	}
+
+	instw_getstatus(&instw,&status);
+
+	if(status&INSTW_TRANSLATED) 
+		result=true_open(instw.translpath,flags,mode);
+	else
+		result=true_open(instw.path,flags,mode);
+	
+	if(flags & (O_WRONLY | O_RDWR)) 
+		instw_log("%d\topen\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_OPEN */
+
+#ifdef HAVE_OPEN64
+int open64(const char *pathname, int flags, ...) {
+/* Eventually, there is a third parameter: it's mode_t mode */
+	va_list ap;
+	mode_t mode;
+	int result;
+	instw_t instw;
+	int status;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"open64(%s,%d,mode)\n",pathname,flags);
+#endif
+
+	va_start(ap, flags);
+	mode = va_arg(ap, mode_t);
+	va_end(ap);
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_open64(pathname,flags,mode);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(flags & (O_WRONLY | O_RDWR)) {
+		backup(instw.truepath);
+		instw_apply(&instw);
+	}
+
+	instw_getstatus(&instw,&status);
+
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective open64(%s)",instw.translpath);
+		result=true_open64(instw.translpath,flags,mode);
+	} else {
+		debug(4,"\teffective open64(%s)",instw.path);
+		result=true_open64(instw.path,flags,mode);
+	}
+	
+	if(flags & (O_WRONLY | O_RDWR)) 
+		instw_log("%d\topen\t%s\t#%s\n",result,
+		    instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_OPEN64 */
+
+#ifdef HAVE_OPENDIR
+#endif  /* HAVE_OPENDIR */
+
+#ifdef HAVE_READDIR
+struct dirent *readdir(DIR *dir) {
+	struct dirent *result;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(3,"readdir(%p)\n",dir);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_readdir(dir);
+		return result;
+	}
+
+	result=true_readdir(dir);
+
+#if DEBUG
+	__instw_printdirent(result);
+#endif
+
+	return result;
+}
+#endif  /* HAVE_READDIR */
+
+#ifdef HAVE_READDIR64
+struct dirent64 *readdir64(DIR *dir) {
+	struct dirent64 *result;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(3,"readdir64(%p)\n",dir);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_readdir64(dir);
+		return result;
+	}
+
+	result=true_readdir64(dir);
+
+#if DEBUG
+	__instw_printdirent64(result);
+#endif
+
+	return result;
+}
+#endif  /* HAVE_READDIR64 */
+
+#ifdef HAVE_READLINK
+ssize_t readlink(const char *path,char *buf,size_t bufsiz) {
+	int result;
+	instw_t instw;
+	int status;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"readlink(\"%s\",%p,%ld)\n",path,buf,(long int)bufsiz);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_readlink(path,buf,bufsiz);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,path);
+	instw_getstatus(&instw,&status);
+	
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(status&INSTW_TRANSLATED)
+		result=true_readlink(instw.translpath,buf,bufsiz);
+	else
+		result=true_readlink(instw.path,buf,bufsiz);
+
+	instw_delete(&instw);
+
+	return result;	
+}
+#endif  /* HAVE_READLINK */
+
+#ifdef HAVE_REALPATH
+char *realpath(const char *file_name,char *resolved_name) {
+	char *result;
+
+	if (!libc_handle)
+		initialize();
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_realpath(file_name,resolved_name);
+		return result;
+	}
+
+	result=true_realpath(file_name,resolved_name);
+
+	return result;
+}
+#endif  /* HAVE_REALPATH */
+
+#ifdef HAVE_RENAME
+int rename(const char *oldpath, const char *newpath) {
+	int result;
+	instw_t oldinstw;
+	instw_t newinstw;
+
+	REFCOUNT;
+	
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"rename(\"%s\",\"%s\")\n",oldpath,newpath);	
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_rename(oldpath,newpath);
+		return result;
+	}
+
+	instw_new(&oldinstw);
+	instw_new(&newinstw);
+	instw_setpath(&oldinstw,oldpath);
+	instw_setpath(&newinstw,newpath);
+
+#if DEBUG
+	instw_print(&oldinstw);
+	instw_print(&newinstw);
+#endif
+
+	backup(oldinstw.truepath);
+	instw_apply(&oldinstw);
+	instw_apply(&newinstw);
+
+	result=true_rename(oldinstw.translpath,newinstw.translpath);
+	instw_log("%d\trename\t%s\t%s\t#%s\n",result,
+	    oldinstw.reslvpath,newinstw.reslvpath,error(result));
+
+	instw_delete(&oldinstw);
+	instw_delete(&newinstw);
+
+	return result;
+}
+#endif  /* HAVE_RENAME */
+
+#ifdef HAVE_RMDIR
+int rmdir(const char *pathname) {
+	int result;
+	instw_t instw;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"rmdir(%s)\n",pathname);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_rmdir(pathname);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+
+	backup(instw.truepath);
+	instw_apply(&instw);
+
+	result=true_rmdir(instw.translpath);
+	instw_log("%d\trmdir\t%s\t#%s\n",result,instw.reslvpath,error(result));
+	
+	instw_delete(&instw);
+	
+	return result;
+}
+#endif  /* HAVE_RMDIR */
+
+#ifdef HAVE_SCANDIR
+int scandir(const char *dir,struct dirent ***namelist,
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+		int (*select)(struct dirent *),
+		int (*compar)(const void *,const void *)
+#else
+		int (*select)(const struct dirent *),
+		int (*compar)(const struct dirent **,const struct dirent **)
+#endif
+) {
+	int result;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"scandir(%s,%p,%p,%p)\n",dir,namelist,select,compar);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_scandir(dir,namelist,select,compar);
+		return result;
+	}
+
+	result=true_scandir(dir,namelist,select,compar);
+
+	return result;
+}		
+#endif  /* HAVE_SCANDIR */
+
+#ifdef HAVE_SCANDIR64
+int scandir64(const char *dir,struct dirent64 ***namelist,
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+		int (*select)(struct dirent64 *),
+		int (*compar)(const void *,const void *)
+#else
+		int (*select)(const struct dirent64 *),
+		int (*compar)(const struct dirent64 **,const struct dirent64 **)
+#endif
+) {
+	int result;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"scandir64(%s,%p,%p,%p)\n",dir,namelist,select,compar);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_scandir64(dir,namelist,select,compar);
+		return result;
+	}
+
+	result=true_scandir64(dir,namelist,select,compar);
+
+	return result;
+}		
+
+int __xstat64(int version,const char *pathname,struct stat64 *info) {
+	int result;
+	instw_t instw;
+	int status;
+
+#if DEBUG
+	debug(2,"stat64(%s,%p)\n",pathname,info);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_xstat64(version,pathname,info);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	instw_getstatus(&instw,&status);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective stat64(%s,%p)\n",
+		      instw.translpath,info);
+		result=true_xstat64(version,instw.translpath,info);
+	} else {
+		debug(4,"\teffective stat64(%s,%p)\n",
+		      instw.path,info);
+		result=true_xstat64(version,instw.path,info);
+	}	
+
+	instw_delete(&instw);
+
+	return result;	
+}
+#endif  /* HAVE_SCANDIR64 */
+
+#ifdef HAVE_STAT
+int stat(const char *pathname,struct stat *info)
+{
+	int result;
+	instw_t instw;
+	int status;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"stat(%s,%p)\n",pathname,info);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_stat(pathname,info);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	instw_getstatus(&instw,&status);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective stat(%s,%p)\n",
+		      instw.translpath,info);
+		result=true_stat(instw.translpath,info);
+	} else {
+		debug(4,"\teffective stat(%s,%p)\n",
+		      instw.path,info);
+		result=true_stat(instw.path,info);
+	}
+
+	instw_delete(&instw);
+
+	return result;	
+}
+#endif  /* HAVE_STAT */
+
+#ifdef HAVE_STAT64
+#endif  /* HAVE_STAT64 */
+
+//symlink
+//time
+//truncate
+//truncate64
+//unlink
+//utime
+//utimes
+//__fxstat
+//__lxstat
+//__xmknod
+//__xstat
+
+/*
  * *****************************************************************************
  */
 
-static void *libc_handle=NULL;
-static void initialize(void) {
+void initialize(void) {
 	if (libc_handle)
 		return;
 
@@ -2189,42 +3501,6 @@ return true_time(timer);
  * *****************************************************************************
  */
 
-int chdir(const char *pathname) {
-	int result;
-	instw_t instw;
-	int status;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"chdir(%s)n",pathname);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_chdir(pathname);
-		return result;
-	}    
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-	instw_getstatus(&instw,&status);
-
-	if(status&INSTW_TRANSLATED && !(status&INSTW_ISINROOT)) {
-		result=true_chdir(instw.translpath);
-		debug(3,"\teffective chdir(%s)\n",instw.translpath);
-	} else {
-		result=true_chdir(pathname);
-		debug(3,"\teffective chdir(%s)\n",pathname);
-	}
-
-	instw_delete(&instw);
-
-	return result;
-}
-
 int chmod(const char *path, mode_t mode) {
 	int result;
 	instw_t instw;
@@ -2264,409 +3540,8 @@ int chmod(const char *path, mode_t mode) {
 	return result;
 }
 
-int chown(const char *path, uid_t owner, gid_t group) {
-	int result;
-	instw_t instw;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"chown(%s,owner,group)\n",path);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_chown(path,owner,group);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,path);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	backup(instw.truepath);
-	instw_apply(&instw);
-
-	result=true_chown(instw.translpath,owner,group);
-	instw_log("%d\tchown\t%s\t%d\t%d\t#%s\n",result,
-	    instw.reslvpath,owner,group,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int chroot(const char *path) {
-	int result;
-	char canonic[MAXPATHLEN];
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"chroot(%s)\n",path);
-#endif
-
-	canonicalize(path, canonic);
-	result = true_chroot(path);
-	  /*
-	   * From now on, another log file will be written if 
-	   * INSTW_LOGFILE is set                          
-	   */
-	instw_log("%d\tchroot\t%s\t#%s\n", result, canonic, error(result));
-	return result;
-}
-
-#ifdef __DARWIN_ALIAS_C
-int creat(const char *pathname, mode_t mode) __DARWIN_ALIAS_C(creat);
-#endif
-
-int creat(const char *pathname, mode_t mode) {
-/* Is it a system call? */
-	int result;
-	instw_t instw;
-	
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"creat(%s,mode)\n",pathname);
-#endif
-	
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_creat(pathname,mode);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	backup(instw.truepath);
-	instw_apply(&instw);
-
-	result = true_open(instw.translpath,O_CREAT|O_WRONLY|O_TRUNC,mode);
-	instw_log("%d\tcreat\t%s\t#%s\n",result,instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int fchmod(int filedes, mode_t mode) {
-	int result;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"fchmod\n");
-#endif
-
-	result = true_fchmod(filedes, mode);
-	instw_log("%d\tfchmod\t%d\t0%04o\t#%s\n",result,filedes,mode,error(result));
-	return result;
-}
-
-int fchown(int fd, uid_t owner, gid_t group) {
-	int result;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"fchown\n");
-#endif
-
-	result = true_fchown(fd, owner, group);
-	instw_log("%d\tfchown\t%d\t%d\t%d\t#%s\n",result,fd,owner,group,error(result));
-	return result;
-}
-
-FILE *fopen(const char *pathname, const char *mode) {
-	FILE *result;
-	instw_t instw;
-	int status=0;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"fopen(%s,%s)\n",pathname,mode);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_fopen(pathname,mode);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-	
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') {
-		backup(instw.truepath);
-		instw_apply(&instw);
-		instw_log("%d\tfopen\t%s\t#%s\n",(int)result,
-		    instw.reslvpath,error(result));
-	}
-
-	instw_getstatus(&instw,&status);
-	
-	if(status&INSTW_TRANSLATED) {
-		debug(4,"\teffective fopen(%s)",instw.translpath);
-		result=true_fopen(instw.translpath,mode); 
-	} else {
-		debug(4,"\teffective fopen(%s)",instw.path);
-		result=true_fopen(instw.path,mode);
-	}
-	
-	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') 
-		instw_log("%d\tfopen\t%s\t#%s\n",(int)result,
-		    instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int ftruncate(int fd, off_t length) {
-	int result;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"ftruncate\n");
-#endif
-
-	result = true_ftruncate(fd, length);
-	instw_log("%d\tftruncate\t%d\t%d\t#%s\n",result,fd,(int)length,error(result));
-	return result;
-}
-
-char *getcwd(char *buffer,size_t size) {
-	char wpath[PATH_MAX+1];
-	char *result;
-	char *wptr;
-	size_t wsize;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"getcwd(%p,%ld)\n",buffer,(long int)size);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_getcwd(buffer,size);
-		return result;
-	}
-
-	if(	__instw.gstatus&INSTW_INITIALIZED &&
-		__instw.gstatus&INSTW_OKTRANSL && 
-		(NULL!=(result=true_getcwd(wpath,sizeof(wpath)))) ) {
-		  /* we untranslate any translated path */
-		if(strstr(wpath,__instw.transl)==wpath)	{
-			wptr=wpath+strlen(__instw.transl);
-			wsize=strlen(wptr)+1;
-		} else {
-			wptr=wpath;
-			wsize=strlen(wptr)+1;
-		}
-
-		if (buffer == NULL) {
-			if (size !=0 && size < wsize) {
-				result=NULL;
-				errno=(size<=0?EINVAL:ERANGE);
-			} else {
-				result=malloc(wsize);
-				if(result == NULL) {
-					errno=ENOMEM;
-				} else {
-					strcpy(result,wptr);
-				}
-			}
-		} else {
-			if(size>=wsize) {
-				strcpy(buffer,wptr);
-			} else {
-				result=NULL;
-				errno=(size<=0?EINVAL:ERANGE);
-			}
-		}
-	} else  {
-		result=true_getcwd(buffer,size);
-	}
-
-#if DEBUG
-	debug(3,"\teffective getcwd(%s,%ld)\n",
-	      (result?buffer:"(null)"),(long int)size);
-#endif	
-
-	return result;
-}
-
-int lchown(const char *path, uid_t owner, gid_t group) {
-/* Linux specific? */
-	int result;
-	instw_t instw;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"lchown(%s,owner,group)\n",path);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_lchown(path,owner,group);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,path);
-	
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	backup(instw.truepath);
-	instw_apply(&instw);
-
-	result=true_lchown(instw.translpath,owner,group);
-	instw_log("%d\tlchown\t%s\t%d\t%d\t#%s\n",result,
-	    instw.reslvpath,owner,group,error(result));
-	    
-	instw_delete(&instw);
-
-	return result;
-}
-
-int link(const char *oldpath, const char *newpath) {
-	int result;
-	instw_t instw_o;
-	instw_t instw_n;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"link(%s,%s)\n",oldpath,newpath);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_link(oldpath,newpath);
-		return result;
-	}
-
-	instw_new(&instw_o);
-	instw_new(&instw_n);
-	instw_setpath(&instw_o,oldpath);
-	instw_setpath(&instw_n,newpath);
-
-#if DEBUG
-	instw_print(&instw_o);
-	instw_print(&instw_n);
-#endif
-
-	backup(instw_o.truepath);
-	instw_apply(&instw_o);
-	instw_apply(&instw_n);
-	
-	result=true_link(instw_o.translpath,instw_n.translpath);
-	instw_log("%d\tlink\t%s\t%s\t#%s\n",result,
-	    instw_o.reslvpath,instw_n.reslvpath,error(result));
-	    
-	instw_delete(&instw_o);
-	instw_delete(&instw_n);
-
-	return result;
-}
-
-int mkdir(const char *pathname, mode_t mode) {
-	int result;
-	instw_t instw;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"mkdir(%s,mode)\n",pathname);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_mkdir(pathname,mode);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	instw_apply(&instw);
-
-	result=true_mkdir(instw.translpath,mode);
-	instw_log("%d\tmkdir\t%s\t#%s\n",result,instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-#ifdef INSTW_HAS_XMKNOD
 int __xmknod(int version,const char *pathname, mode_t mode,dev_t *dev)
 #define INSTW_USE_XMKNOD(ver,path,mode,dev) true_xmknod((ver),(path),(mode),(dev))
-#else
-int mknod(const char *pathname, mode_t mode,dev_t dev)
-#define INSTW_USE_XMKNOD(ver,path,mode,dev) true_mknod((path),(mode),(dev))
-#endif
 {
 	int result;
 	instw_t instw;
@@ -2706,74 +3581,6 @@ int mknod(const char *pathname, mode_t mode,dev_t dev)
 }
 #undef INSTW_USE_XMKNOD
 
-#ifdef __DARWIN_ALIAS_C
-int open(const char *pathname, int flags, ...) __DARWIN_ALIAS_C(open);
-#endif
-
-int open(const char *pathname, int flags, ...) {
-/* Eventually, there is a third parameter: it's mode_t mode */
-	va_list ap;
-	mode_t mode;
-	int result;
-	instw_t instw;
-	int status;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"open(%s,%d,mode)\n",pathname,flags);
-#endif
-
-	if (flags & O_CREAT) {
-		va_start(ap, flags);
-#ifdef __APPLE__
-		/* Apple uses int to hold the mode_t variadic. */
-		mode = va_arg(ap, int);
-#else
-		mode = va_arg(ap, mode_t);
-#endif
-		va_end(ap);
-	} else {
-		mode = 0;
-	}
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_open(pathname,flags,mode);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-	
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(flags & (O_WRONLY | O_RDWR)) {
-		backup(instw.truepath);
-		instw_apply(&instw);
-	}
-
-	instw_getstatus(&instw,&status);
-
-	if(status&INSTW_TRANSLATED) 
-		result=true_open(instw.translpath,flags,mode);
-	else
-		result=true_open(instw.path,flags,mode);
-	
-	if(flags & (O_WRONLY | O_RDWR)) 
-		instw_log("%d\topen\t%s\t#%s\n",result,instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
 /*
  *
  */
@@ -2810,203 +3617,7 @@ DIR *opendir(const char *dirname) {
 	return result;
 }
 
-struct dirent *readdir(DIR *dir) {
-	struct dirent *result;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(3,"readdir(%p)\n",dir);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_readdir(dir);
-		return result;
-	}
-
-	result=true_readdir(dir);
-
-#if DEBUG
-	__instw_printdirent(result);
-#endif
-
-	return result;
-}
-
-ssize_t readlink(const char *path,char *buf,size_t bufsiz) {
-	int result;
-	instw_t instw;
-	int status;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"readlink(\"%s\",%p,%ld)\n",path,buf,(long int)bufsiz);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_readlink(path,buf,bufsiz);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,path);
-	instw_getstatus(&instw,&status);
-	
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(status&INSTW_TRANSLATED)
-		result=true_readlink(instw.translpath,buf,bufsiz);
-	else
-		result=true_readlink(instw.path,buf,bufsiz);
-
-	instw_delete(&instw);
-
-	return result;	
-}
-
-char *realpath(const char *file_name,char *resolved_name) {
-	char *result;
-
-	if (!libc_handle)
-		initialize();
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_realpath(file_name,resolved_name);
-		return result;
-	}
-
-	result=true_realpath(file_name,resolved_name);
-
-	return result;
-}
-
-int rename(const char *oldpath, const char *newpath) {
-	int result;
-	instw_t oldinstw;
-	instw_t newinstw;
-
-	REFCOUNT;
-	
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"rename(\"%s\",\"%s\")\n",oldpath,newpath);	
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_rename(oldpath,newpath);
-		return result;
-	}
-
-	instw_new(&oldinstw);
-	instw_new(&newinstw);
-	instw_setpath(&oldinstw,oldpath);
-	instw_setpath(&newinstw,newpath);
-
-#if DEBUG
-	instw_print(&oldinstw);
-	instw_print(&newinstw);
-#endif
-
-	backup(oldinstw.truepath);
-	instw_apply(&oldinstw);
-	instw_apply(&newinstw);
-
-	result=true_rename(oldinstw.translpath,newinstw.translpath);
-	instw_log("%d\trename\t%s\t%s\t#%s\n",result,
-	    oldinstw.reslvpath,newinstw.reslvpath,error(result));
-
-	instw_delete(&oldinstw);
-	instw_delete(&newinstw);
-
-	return result;
-}
-
-int rmdir(const char *pathname) {
-	int result;
-	instw_t instw;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"rmdir(%s)\n",pathname);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_rmdir(pathname);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-
-	backup(instw.truepath);
-	instw_apply(&instw);
-
-	result=true_rmdir(instw.translpath);
-	instw_log("%d\trmdir\t%s\t#%s\n",result,instw.reslvpath,error(result));
-	
-	instw_delete(&instw);
-	
-	return result;
-}
-
-int scandir(const char *dir,struct dirent ***namelist,
-#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
-		int (*select)(struct dirent *),
-		int (*compar)(const void *,const void *)
-#else
-		int (*select)(const struct dirent *),
-		int (*compar)(const struct dirent **,const struct dirent **)
-#endif
-) {
-	int result;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"scandir(%s,%p,%p,%p)\n",dir,namelist,select,compar);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_scandir(dir,namelist,select,compar);
-		return result;
-	}
-
-	result=true_scandir(dir,namelist,select,compar);
-
-	return result;
-}		
-
-#ifdef INSTW_HAS_XSTAT
 int __xstat(int version,const char *pathname,struct stat *info)
-#define INSTW_USE_XSTAT(ver,path,info) true_xstat((ver), (path), (info))
-#else
-int stat(const char *pathname,struct stat *info)
-#define INSTW_USE_XSTAT(ver,path,info) true_stat((path), (info))
-#endif
 {
 	int result;
 	instw_t instw;
@@ -3293,305 +3904,7 @@ int utimes (const char *pathname, const struct timeval *newtimes) {
        return result;
 }
 
-int access (const char *pathname, int type) {
-       int result;
-       instw_t instw;
-
-       if (!libc_handle)
-               initialize();
-
-#if DEBUG
-       debug(2,"access(%s,%d)\n",pathname,type);
-#endif
-
-         /* We were asked to work in "real" mode */
-       if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-           !(__instw.gstatus & INSTW_OKWRAP) ) {
-               result=true_access(pathname,type);
-               return result;
-       }
-
-       instw_new(&instw);
-       instw_setpath(&instw,pathname);
-
-#if DEBUG
-       instw_print(&instw);
-#endif
-
-       backup(instw.truepath);
-       instw_apply(&instw);
-
-       result=true_access(instw.translpath,type);
-       instw_log("%d\taccess\t%s\t#%s\n",result,instw.reslvpath,error(result));
-
-       instw_delete(&instw);
-
-       return result;
-}
-
 #ifdef INSTW_USE_LARGEFILE64
-
-int creat64(const char *pathname, __mode_t mode) {
-/* Is it a system call? */
-	int result;
-	instw_t instw;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"creat64(%s,mode)\n",pathname);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_creat64(pathname,mode);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	backup(instw.truepath);
-	instw_apply(&instw);
-
-	result=true_open64(instw.translpath,O_CREAT | O_WRONLY | O_TRUNC, mode);
-	instw_log("%d\tcreat\t%s\t#%s\n",result,instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int ftruncate64(int fd, __off64_t length) {
-	int result;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"ftruncate64\n");
-#endif
-
-	result = true_ftruncate64(fd, length);
-	instw_log("%d\tftruncate\t%d\t%d\t#%s\n",result,fd,(int)length,error(result));
-	return result;
-}
-
-FILE *fopen64(const char *pathname, const char *mode) {
-	FILE *result;
-	instw_t instw;
-	int status;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"fopen64(%s,%s)\n",pathname,mode);
-#endif
-	
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_fopen64(pathname,mode);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-	
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') {
-		backup(instw.truepath);
-		instw_apply(&instw);
-	}
-
-	instw_getstatus(&instw,&status);
-	
-	if(status&INSTW_TRANSLATED) {
-		debug(4,"\teffective fopen64(%s)",instw.translpath);
-		result=true_fopen64(instw.translpath,mode); 
-	} else {
-		debug(4,"\teffective fopen64(%s)",instw.path);
-		result=true_fopen64(instw.path,mode);
-	}
-
-	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') 
-		instw_log("%d\tfopen64\t%s\t#%s\n",(int)result,
-		    instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int open64(const char *pathname, int flags, ...) {
-/* Eventually, there is a third parameter: it's mode_t mode */
-	va_list ap;
-	mode_t mode;
-	int result;
-	instw_t instw;
-	int status;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"open64(%s,%d,mode)\n",pathname,flags);
-#endif
-
-	va_start(ap, flags);
-	mode = va_arg(ap, mode_t);
-	va_end(ap);
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_open64(pathname,flags,mode);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(flags & (O_WRONLY | O_RDWR)) {
-		backup(instw.truepath);
-		instw_apply(&instw);
-	}
-
-	instw_getstatus(&instw,&status);
-
-	if(status&INSTW_TRANSLATED) {
-		debug(4,"\teffective open64(%s)",instw.translpath);
-		result=true_open64(instw.translpath,flags,mode);
-	} else {
-		debug(4,"\teffective open64(%s)",instw.path);
-		result=true_open64(instw.path,flags,mode);
-	}
-	
-	if(flags & (O_WRONLY | O_RDWR)) 
-		instw_log("%d\topen\t%s\t#%s\n",result,
-		    instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-struct dirent64 *readdir64(DIR *dir) {
-	struct dirent64 *result;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(3,"readdir64(%p)\n",dir);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_readdir64(dir);
-		return result;
-	}
-
-	result=true_readdir64(dir);
-
-#if DEBUG
-	__instw_printdirent64(result);
-#endif
-
-	return result;
-}
-
-int scandir64(const char *dir,struct dirent64 ***namelist,
-#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
-		int (*select)(struct dirent64 *),
-		int (*compar)(const void *,const void *)
-#else
-		int (*select)(const struct dirent64 *),
-		int (*compar)(const struct dirent64 **,const struct dirent64 **)
-#endif
-) {
-	int result;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"scandir64(%s,%p,%p,%p)\n",dir,namelist,select,compar);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_scandir64(dir,namelist,select,compar);
-		return result;
-	}
-
-	result=true_scandir64(dir,namelist,select,compar);
-
-	return result;
-}		
-
-int __xstat64(int version,const char *pathname,struct stat64 *info) {
-	int result;
-	instw_t instw;
-	int status;
-
-#if DEBUG
-	debug(2,"stat64(%s,%p)\n",pathname,info);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_xstat64(version,pathname,info);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-	instw_getstatus(&instw,&status);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(status&INSTW_TRANSLATED) {
-		debug(4,"\teffective stat64(%s,%p)\n",
-		      instw.translpath,info);
-		result=true_xstat64(version,instw.translpath,info);
-	} else {
-		debug(4,"\teffective stat64(%s,%p)\n",
-		      instw.path,info);
-		result=true_xstat64(version,instw.path,info);
-	}	
-
-	instw_delete(&instw);
-
-	return result;	
-}
 
 int __lxstat64(int version,const char *pathname,struct stat64 *info) {
 	int result;
