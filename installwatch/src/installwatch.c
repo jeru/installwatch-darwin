@@ -112,20 +112,6 @@ int __installwatch_timecount = 0;
 static void *libc_handle=NULL;
 static void initialize(void);
 
-/* If there is no __xstat, just import symbol "stat" in initialize() */
-#ifdef INSTW_HAS_XSTAT
-int true_stat_impl(const char *pathname,struct stat *info) {
-	return true_xstat(_STAT_VER,pathname,info);
-}
-#endif
-
-/* If there is no __xmknod, just import symbol "mknod" in initialize() */
-#ifdef INSTW_HAS_XSTAT
-int true_mknod_impl(const char *pathname,mode_t mode,dev_t dev) {
-	return true_xmknod(_MKNOD_VER,pathname,mode,&dev);
-}
-#endif
-
   /* A few defines to fix things a little */
 #define INSTW_OK 0 
   /* If not set, no work with translation is allowed */
@@ -397,22 +383,22 @@ static int (*true_utime)(const char *,const struct utimbuf *);
 static int (*true_utimes)(const char *,const struct timeval *);
 #endif
 #ifdef HAVE___FXSTAT
-static int (*true_fxstat)(int,int fd,struct stat *);
+static int (*true___fxstat)(int,int fd,struct stat *);
 #endif
 #ifdef HAVE___LXSTAT
-static int (*true_lxstat)(int,const char *,struct stat *);
+static int (*true___lxstat)(int,const char *,struct stat *);
 #endif
 #ifdef HAVE___LXSTAT64
-static int (*true_lxstat64)(int,const char *, struct stat64 *);
+static int (*true___lxstat64)(int,const char *, struct stat64 *);
 #endif
 #ifdef HAVE___XMKNOD
-static int (*true_xmknod)(int ver,const char *, mode_t, dev_t *);
+static int (*true___xmknod)(int ver,const char *, mode_t, dev_t *);
 #endif
 #ifdef HAVE___XSTAT
-static int (*true_xstat)(int,const char *,struct stat *);
+static int (*true___xstat)(int,const char *,struct stat *);
 #endif
 #ifdef HAVE___XSTAT64
-static int (*true_xstat64)(int,const char *, struct stat64 *);
+static int (*true___xstat64)(int,const char *, struct stat64 *);
 #endif
 
 /*
@@ -494,6 +480,47 @@ int chdir(const char *pathname) {
 	return result;
 }
 #endif  /* HAVE_CHDIR */
+
+#ifdef HAVE_CHMOD
+int chmod(const char *path, mode_t mode) {
+	int result;
+	instw_t instw;
+
+	REFCOUNT;
+	
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"chmod(%s,mode)\n",path);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_chmod(path,mode);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,path);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	backup (instw.truepath);
+	instw_apply(&instw);
+
+	result = true_chmod(instw.translpath, mode);
+	instw_log("%d\tchmod\t%s\t0%04o\t#%s\n",result,
+	    instw.reslvpath,mode,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_CHMOD */
 
 #ifdef HAVE_CHOWN
 int chown(const char *path, uid_t owner, gid_t group) {
@@ -985,9 +1012,10 @@ int link(const char *oldpath, const char *newpath) {
 #endif  /* HAVE_LINK */
 
 #ifdef HAVE_LSTAT
+
 #   ifdef HAVE___XLSTAT
 int true_lstat_impl(const char *pathname,struct stat *info) {
-	return true_lxstat(_STAT_VER,pathname,info);
+	return true___lxstat(_STAT_VER,pathname,info);
 }
 #   endif
 
@@ -1036,9 +1064,10 @@ int lstat(const char *pathname,struct stat *info)
 #endif  /* HAVE_LSTAT */
 
 #ifdef HAVE_LSTAT64
+
 #   ifdef HAVE___XLSTAT64
 int true_lstat64_impl(const char *pathname,struct stat64 *info) {
-	return true_lxstat64(_STAT_VER,pathname,info);
+	return true___lxstat64(_STAT_VER,pathname,info);
 }
 #   endif
 
@@ -1122,9 +1151,10 @@ int mkdir(const char *pathname, mode_t mode) {
 #endif  /* HAVE_MKDIR */
 
 #ifdef HAVE_MKNOD
+
 #   ifdef HAVE___XMKNOD
 int true_mknod_impl(const char* pathname, mode_t mode, dev_t dev) {
-    return true_xmknod(_MKNOD_VER, pathname, mode, dev);
+    return true___xmknod(_MKNOD_VER, pathname, mode, dev);
 }
 #   endif
 
@@ -1296,6 +1326,38 @@ int open64(const char *pathname, int flags, ...) {
 #endif  /* HAVE_OPEN64 */
 
 #ifdef HAVE_OPENDIR
+DIR *opendir(const char *dirname) {
+	DIR *result;
+	instw_t instw;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"opendir(%s)\n",dirname);
+#endif
+	
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_opendir(dirname);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,dirname);
+	instw_makedirls(&instw);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	result=true_opendir(instw.mdirlspath);
+
+	instw_delete(&instw);
+
+	return result;
+}
 #endif  /* HAVE_OPENDIR */
 
 #ifdef HAVE_READDIR
@@ -1558,48 +1620,16 @@ int scandir64(const char *dir,struct dirent64 ***namelist,
 
 	return result;
 }		
-
-int __xstat64(int version,const char *pathname,struct stat64 *info) {
-	int result;
-	instw_t instw;
-	int status;
-
-#if DEBUG
-	debug(2,"stat64(%s,%p)\n",pathname,info);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_xstat64(version,pathname,info);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-	instw_getstatus(&instw,&status);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(status&INSTW_TRANSLATED) {
-		debug(4,"\teffective stat64(%s,%p)\n",
-		      instw.translpath,info);
-		result=true_xstat64(version,instw.translpath,info);
-	} else {
-		debug(4,"\teffective stat64(%s,%p)\n",
-		      instw.path,info);
-		result=true_xstat64(version,instw.path,info);
-	}	
-
-	instw_delete(&instw);
-
-	return result;	
-}
 #endif  /* HAVE_SCANDIR64 */
 
 #ifdef HAVE_STAT
+
+#   ifdef HAVE___XSTAT
+int true_stat_impl(const char *pathname,struct stat *info) {
+	return true___xstat(_STAT_VER,pathname,info);
+}
+#   endif
+
 int stat(const char *pathname,struct stat *info)
 {
 	int result;
@@ -1647,17 +1677,474 @@ int stat(const char *pathname,struct stat *info)
 #ifdef HAVE_STAT64
 #endif  /* HAVE_STAT64 */
 
-//symlink
-//time
-//truncate
-//truncate64
-//unlink
-//utime
-//utimes
-//__fxstat
-//__lxstat
-//__xmknod
-//__xstat
+#ifdef HAVE_SYMLINK
+int symlink(const char *pathname, const char *slink) {
+	int result;
+	instw_t instw;
+	instw_t instw_slink;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"symlink(%s,%s)\n",pathname,slink);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_symlink(pathname,slink);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_new(&instw_slink);
+	instw_setpath(&instw,pathname);
+	instw_setpath(&instw_slink,slink);
+
+#if DEBUG
+	instw_print(&instw_slink);
+#endif
+
+	backup(instw_slink.truepath);
+	instw_apply(&instw_slink);
+	
+	result=true_symlink(pathname,instw_slink.translpath);
+	instw_log("%d\tsymlink\t%s\t%s\t#%s\n",
+           result,instw.path,instw_slink.reslvpath,error(result));
+
+	    
+	instw_delete(&instw);
+	instw_delete(&instw_slink);
+
+	return result;
+}
+#endif  /* HAVE_SYMLINK */
+
+#ifdef HAVE_TIME
+#endif  /* HAVE_TIME */
+
+#ifdef HAVE_TRUNCATE
+int truncate(const char *path, off_t length) {
+	int result;
+	instw_t instw;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"truncate(%s,length)\n",path);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_truncate(path,length);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,path);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	backup(instw.truepath);
+	instw_apply(&instw);
+
+	result=true_truncate(instw.translpath,length);
+	instw_log("%d\ttruncate\t%s\t%d\t#%s\n",result,
+	    instw.reslvpath,(int)length,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_TRUNCATE */
+
+#ifdef HAVE_TRUNCATE64
+int truncate64(const char *path, __off64_t length) {
+	int result;
+	instw_t instw;
+
+	if (!libc_handle)
+		initialize();
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"truncate64(%s,length)\n",path);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_truncate64(path,length);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,path);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	backup(instw.truepath);
+	instw_apply(&instw);
+
+	result=true_truncate64(instw.translpath,length);
+	
+	instw_log("%d\ttruncate\t%s\t%d\t#%s\n",result,
+	    instw.reslvpath,(int)length,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_TRUNCATE64 */
+
+#ifdef HAVE_UNLINK
+int unlink(const char *pathname) {
+	int result;
+	instw_t instw;
+
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"unlink(%s)\n",pathname);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_unlink(pathname);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	backup(instw.truepath);
+	instw_apply(&instw);
+
+	result=true_unlink(instw.translpath);
+	instw_log("%d\tunlink\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_UNLINK */
+
+#ifdef HAVE_UTIME
+int utime (const char *pathname, const struct utimbuf *newtimes) {
+	int result;
+	instw_t instw;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"utime(%s,newtimes)\n",pathname);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true_utime(pathname,newtimes);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	backup(instw.truepath);
+	instw_apply(&instw);
+
+	result=true_utime(instw.translpath,newtimes);
+	instw_log("%d\tutime\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+
+	return result;
+}
+#endif  /* HAVE_UTIME */
+
+#ifdef HAVE_UTIMES
+int utimes (const char *pathname, const struct timeval *newtimes) {
+       int result;
+       instw_t instw;
+
+       if (!libc_handle)
+               initialize();
+
+#if DEBUG
+       debug(2,"utimes(%s,newtimes)\n",pathname);
+#endif
+
+         /* We were asked to work in "real" mode */
+       if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+           !(__instw.gstatus & INSTW_OKWRAP) ) {
+               result=true_utimes(pathname,newtimes);
+               return result;
+       }
+
+       instw_new(&instw);
+       instw_setpath(&instw,pathname);
+
+#if DEBUG
+       instw_print(&instw);
+#endif
+
+       backup(instw.truepath);
+       instw_apply(&instw);
+
+       result=true_utimes(instw.translpath,newtimes);
+       instw_log("%d\tutimes\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+       instw_delete(&instw);
+
+       return result;
+}
+#endif  /* HAVE_UTIMES */
+
+#ifdef HAVE___FXSTAT
+#endif  /* HAVE___FXSTAT */
+
+#ifdef HAVE___LXSTAT
+int __lxstat(int version,const char *pathname,struct stat *info)
+{
+	int result;
+	instw_t instw;
+	int status;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"lstat(%s,%p)\n",pathname,info);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true___lxstat(version,pathname,info);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	instw_getstatus(&instw,&status);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective lstat(%s,%p)\n",
+			instw.translpath,info);
+		result=true___lxstat(version,instw.translpath,info);
+	} else {
+		debug(4,"\teffective lstat(%s,%p)\n",
+			instw.path,info);
+		result=true___lxstat(version,instw.path,info);
+	}
+
+	instw_delete(&instw);
+
+	return result;	
+}
+#endif  /* HAVE___LXSTAT */
+
+#ifdef  HAVE___LXSTAT64
+int __lxstat64(int version,const char *pathname,struct stat64 *info) {
+	int result;
+	instw_t instw;
+	int status;
+
+#if DEBUG
+	debug(2,"lstat64(%s,%p)\n",pathname,info);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true___lxstat64(version,pathname,info);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	instw_getstatus(&instw,&status);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective lstat64(%s,%p)\n",
+			instw.translpath,info);
+		result=true___lxstat64(version,instw.translpath,info);
+	} else {
+		debug(4,"\teffective lstat64(%s,%p)\n",
+			instw.path,info);
+		result=true___lxstat64(version,instw.path,info);
+	}
+
+	instw_delete(&instw);
+
+	return result;	
+}
+#endif  /* HAVE___LXSTAT64 */
+
+#ifdef HAVE___XMKNOD
+int __xmknod(int version,const char *pathname, mode_t mode,dev_t *dev)
+{
+	int result;
+	instw_t instw;
+	
+	REFCOUNT;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"mknod(%s,mode,dev)\n",pathname);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true___xmknod(version,pathname,mode,dev);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	instw_apply(&instw);
+	backup(instw.truepath);
+
+	result=true___xmknod(version,instw.translpath,mode,dev);
+	instw_log("%d\tmknod\t%s\t#%s\n",result,instw.reslvpath,error(result));
+
+	instw_delete(&instw);
+	
+	return result;
+}
+#endif  /* HAVE___XMKNOD */
+
+#ifdef HAVE___XSTAT
+int __xstat(int version,const char *pathname,struct stat *info)
+{
+	int result;
+	instw_t instw;
+	int status;
+
+	if (!libc_handle)
+		initialize();
+
+#if DEBUG
+	debug(2,"xstat(%s,%p)\n",pathname,info);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=INSTW_USE_XSTAT(version,pathname,info);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	instw_getstatus(&instw,&status);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective xstat(%s,%p)\n",
+		      instw.translpath,info);
+		result=INSTW_USE_XSTAT(version,instw.translpath,info);
+	} else {
+		debug(4,"\teffective xstat(%s,%p)\n",
+		      instw.path,info);
+		result=INSTW_USE_XSTAT(version,instw.path,info);
+	}
+
+	instw_delete(&instw);
+
+	return result;	
+}
+#endif  /* HAVE___XSTAT */
+
+#ifdef HAVE___XSTAT64
+int __xstat64(int version,const char *pathname,struct stat64 *info) {
+	int result;
+	instw_t instw;
+	int status;
+
+#if DEBUG
+	debug(2,"stat64(%s,%p)\n",pathname,info);
+#endif
+
+	  /* We were asked to work in "real" mode */
+	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
+	    !(__instw.gstatus & INSTW_OKWRAP) ) {
+		result=true___xstat64(version,pathname,info);
+		return result;
+	}
+
+	instw_new(&instw);
+	instw_setpath(&instw,pathname);
+	instw_getstatus(&instw,&status);
+
+#if DEBUG
+	instw_print(&instw);
+#endif
+
+	if(status&INSTW_TRANSLATED) {
+		debug(4,"\teffective stat64(%s,%p)\n",
+		      instw.translpath,info);
+		result=true___xstat64(version,instw.translpath,info);
+	} else {
+		debug(4,"\teffective stat64(%s,%p)\n",
+		      instw.path,info);
+		result=true___xstat64(version,instw.path,info);
+	}	
+
+	instw_delete(&instw);
+
+	return result;	
+}
+#endif  /* HAVE___XSTAT64 */
+
+
 
 /*
  * *****************************************************************************
@@ -1674,77 +2161,164 @@ void initialize(void) {
  //       	printf ("RTLD_NEXT");
         	libc_handle = RTLD_NEXT;
 	#endif
-
-	true_time        = dlsym(libc_handle, "time");
-	true_chdir       = dlsym(libc_handle, "chdir");
-	true_chmod       = dlsym(libc_handle, "chmod");
-	true_chown       = dlsym(libc_handle, "chown");
-	true_chroot      = dlsym(libc_handle, "chroot");
-	true_creat       = dlsym(libc_handle, "creat");
-	true_fchmod      = dlsym(libc_handle, "fchmod");
-	true_fchown      = dlsym(libc_handle, "fchown");
-	true_fopen       = dlsym(libc_handle, "fopen");
-	true_ftruncate   = dlsym(libc_handle, "ftruncate");
-	true_getcwd      = dlsym(libc_handle, "getcwd");
-	true_lchown      = dlsym(libc_handle, "lchown");
-	true_link        = dlsym(libc_handle, "link");
-	true_mkdir       = dlsym(libc_handle, "mkdir");
-#ifdef INSTW_HAS_XMKNOD
-	true_xmknod      = dlsym(libc_handle, "__xmknod");
-	true_mknod       = true_mknod_impl;
-#else
-	true_mknod       = dlsym(libc_handle, "mknod");
-#endif
-	true_open        = dlsym(libc_handle, "open");
-	true_opendir     = dlsym(libc_handle, "opendir");
-	true_readdir     = dlsym(libc_handle, "readdir");
-	true_readlink    = dlsym(libc_handle, "readlink");
-	true_realpath    = dlsym(libc_handle, "realpath");
-	true_rename      = dlsym(libc_handle, "rename");
-	true_rmdir       = dlsym(libc_handle, "rmdir");
-	true_scandir     = dlsym(libc_handle, "scandir");
-#ifdef INSTW_HAS_XSTAT
-	true_xstat       = dlsym(libc_handle, "__xstat");
-	true_stat        = true_stat_impl;
-#else
-	true_stat        = dlsym(libc_handle, "stat");
-#endif
-#ifdef INSTW_HAS_LXSTAT
-	true_lxstat      = dlsym(libc_handle, "__lxstat");
-	true_lstat       = true_lstat_impl;
-#else
-	true_lstat       = dlsym(libc_handle, "lstat");
-#endif
-	true_symlink     = dlsym(libc_handle, "symlink");
-	true_truncate    = dlsym(libc_handle, "truncate");
-	true_unlink      = dlsym(libc_handle, "unlink");
-	true_utime       = dlsym(libc_handle, "utime");
-        true_utimes      = dlsym(libc_handle, "utimes");
-        true_access      = dlsym(libc_handle, "access");
-
-
-
-#ifdef INSTW_USE_LARGEFILE64
-	true_creat64     = dlsym(libc_handle, "creat64");
-	true_fopen64     = dlsym(libc_handle, "fopen64");
+#ifdef HAVE_ACCESS
+	true_access = dlsym(libc_handle, "access");
+#endif  /* HAVE_ACCESS */
+#ifdef HAVE_CHDIR
+	true_chdir = dlsym(libc_handle, "chdir");
+#endif  /* HAVE_CHDIR */
+#ifdef HAVE_CHMOD
+	true_chmod = dlsym(libc_handle, "chmod");
+#endif  /* HAVE_CHMOD */
+#ifdef HAVE_CHOWN
+	true_chown = dlsym(libc_handle, "chown");
+#endif  /* HAVE_CHOWN */
+#ifdef HAVE_CHROOT
+	true_chroot = dlsym(libc_handle, "chroot");
+#endif  /* HAVE_CHROOT */
+#ifdef HAVE_CREAT
+	true_creat = dlsym(libc_handle, "creat");
+#endif  /* HAVE_CREAT */
+#ifdef HAVE_CREAT64
+	true_creat64 = dlsym(libc_handle, "creat64");
+#endif  /* HAVE_CREAT64 */
+#ifdef HAVE_FCHMOD
+	true_fchmod = dlsym(libc_handle, "fchmod");
+#endif  /* HAVE_FCHMOD */
+#ifdef HAVE_FCHOWN
+	true_fchown = dlsym(libc_handle, "fchown");
+#endif  /* HAVE_FCHOWN */
+#ifdef HAVE_FOPEN
+	true_fopen = dlsym(libc_handle, "fopen");
+#endif  /* HAVE_FOPEN */
+#ifdef HAVE_FOPEN64
+	true_fopen64 = dlsym(libc_handle, "fopen64");
+#endif  /* HAVE_FOPEN64 */
+#ifdef HAVE_FTRUNCATE
+	true_ftruncate = dlsym(libc_handle, "ftruncate");
+#endif  /* HAVE_FTRUNCATE */
+#ifdef HAVE_FTRUNCATE64
 	true_ftruncate64 = dlsym(libc_handle, "ftruncate64");
-	true_open64      = dlsym(libc_handle, "open64");
-	true_readdir64   = dlsym(libc_handle, "readdir64");
-	true_scandir64   = dlsym(libc_handle, "scandir64");
-#	ifdef INSTW_HAS_XSTAT
-	true_xstat64     = dlsym(libc_handle, "__xstat64");
-	true_stat64      = true_stat64_impl;
-#	else
-	true_stat64      = dlsym(libc_handle, "stat64");
-#	endif
-#	ifdef INSTW_HAS_LXSTAT
-	true_lxstat64    = dlsym(libc_handle, "__lxstat64");
-	true_lstat64     = true_lstat64_impl;
-#	else
-	true_lstat64     = dlsym(libc_handle, "lstat64");
-#	endif
-	true_truncate64  = dlsym(libc_handle, "truncate64");
-#endif
+#endif  /* HAVE_FTRUNCATE64 */
+#ifdef HAVE_GETCWD
+	true_getcwd = dlsym(libc_handle, "getcwd");
+#endif  /* HAVE_GETCWD */
+#ifdef HAVE_LCHOWN
+	true_lchown = dlsym(libc_handle, "lchown");
+#endif  /* HAVE_LCHOWN */
+#ifdef HAVE_LINK
+	true_link = dlsym(libc_handle, "link");
+#endif  /* HAVE_LINK */
+#ifdef HAVE_LSTAT
+#   ifdef HAVE___LXSTAT
+	true_lstat = true_lstat_impl;
+#   else
+	true_lstat = dlsym(libc_handle, "lstat");
+#   endif
+#endif  /* HAVE_LSTAT */
+#ifdef HAVE_LSTAT64
+#   if HAVE___LXSTAT64
+	true_lstat64 = true_lstat64_impl;
+#   else
+	true_lstat64 = dlsym(libc_handle, "lstat64");
+#   endif
+#endif  /* HAVE_LSTAT64 */
+#ifdef HAVE_MKDIR
+	true_mkdir = dlsym(libc_handle, "mkdir");
+#endif  /* HAVE_MKDIR */
+#ifdef HAVE_MKNOD
+#   ifdef HAVE___XMKNOD
+	true_mknod = true_mknod_impl;
+#   else
+	true_mknod = dlsym(libc_handle, "mknod");
+#   endif
+#endif  /* HAVE_MKNOD */
+#ifdef HAVE_OPEN
+	true_open = dlsym(libc_handle, "open");
+#endif  /* HAVE_OPEN */
+#ifdef HAVE_OPEN64
+	true_open64 = dlsym(libc_handle, "open64");
+#endif  /* HAVE_OPEN64 */
+#ifdef HAVE_OPENDIR
+	true_opendir = dlsym(libc_handle, "opendir");
+#endif  /* HAVE_OPENDIR */
+#ifdef HAVE_READDIR
+	true_readdir = dlsym(libc_handle, "readdir");
+#endif  /* HAVE_READDIR */
+#ifdef HAVE_READDIR64
+	true_readdir64 = dlsym(libc_handle, "readdir64");
+#endif  /* HAVE_READDIR64 */
+#ifdef HAVE_READLINK
+	true_readlink = dlsym(libc_handle, "readlink");
+#endif  /* HAVE_READLINK */
+#ifdef HAVE_REALPATH
+	true_realpath = dlsym(libc_handle, "realpath");
+#endif  /* HAVE_REALPATH */
+#ifdef HAVE_RENAME
+	true_rename = dlsym(libc_handle, "rename");
+#endif  /* HAVE_RENAME */
+#ifdef HAVE_RMDIR
+	true_rmdir = dlsym(libc_handle, "rmdir");
+#endif  /* HAVE_RMDIR */
+#ifdef HAVE_SCANDIR
+	true_scandir = dlsym(libc_handle, "scandir");
+#endif  /* HAVE_SCANDIR */
+#ifdef HAVE_SCANDIR64
+	true_scandir64 = dlsym(libc_handle, "scandir64");
+#endif  /* HAVE_SCANDIR64 */
+#ifdef HAVE_STAT
+#   ifdef HAVE___XSTAT
+	true_stat = true_stat_impl;
+#   else
+	true_stat = dlsym(libc_handle, "stat");
+#   endif
+#endif  /* HAVE_STAT */
+#ifdef HAVE_STAT64
+#   ifdef HAVE___XSTAT64
+	true_stat64 = true_stat64_impl;
+#   else
+	true_stat64 = dlsym(libc_handle, "stat64");
+#   endif
+#endif  /* HAVE_STAT64 */
+#ifdef HAVE_SYMLINK
+	true_symlink = dlsym(libc_handle, "symlink");
+#endif  /* HAVE_SYMLINK */
+#ifdef HAVE_TIME
+	true_time = dlsym(libc_handle, "time");
+#endif  /* HAVE_TIME */
+#ifdef HAVE_TRUNCATE
+	true_truncate = dlsym(libc_handle, "truncate");
+#endif  /* HAVE_TRUNCATE */
+#ifdef HAVE_TRUNCATE64
+	true_truncate64 = dlsym(libc_handle, "truncate64");
+#endif  /* HAVE_TRUNCATE64 */
+#ifdef HAVE_UNLINK
+	true_unlink = dlsym(libc_handle, "unlink");
+#endif  /* HAVE_UNLINK */
+#ifdef HAVE_UTIME
+	true_utime = dlsym(libc_handle, "utime");
+#endif  /* HAVE_UTIME */
+#ifdef HAVE_UTIMES
+	true_utimes = dlsym(libc_handle, "utimes");
+#endif  /* HAVE_UTIMES */
+#ifdef HAVE___FXSTAT
+	true___fxstat = dlsym(libc_handle, "__fxstat");
+#endif  /* HAVE___FXSTAT */
+#ifdef HAVE___LXSTAT
+	true___lxstat = dlsym(libc_handle, "__lxstat");
+#endif  /* HAVE___LXSTAT */
+#ifdef HAVE___LXSTAT64
+	true___lxstat64 = dlsym(libc_handle, "__lxstat64");
+#endif  /* HAVE___LXSTAT64 */
+#ifdef HAVE___XMKNOD
+	true___xmknod = dlsym(libc_handle, "__xmknod");
+#endif  /* HAVE___XMKNOD */
+#ifdef HAVE___XSTAT
+	true___xstat = dlsym(libc_handle, "__xstat");
+#endif  /* HAVE___XSTAT */
+#ifdef HAVE___XSTAT64
+	true___xstat64 = dlsym(libc_handle, "__xstat64");
+#endif  /* HAVE___XSTAT64 */
 
 	if(instw_init()) exit(-1);
 }
@@ -3496,497 +4070,3 @@ time_t time (time_t *timer) {
 
 return true_time(timer);
 }
-
-/* 
- * *****************************************************************************
- */
-
-int chmod(const char *path, mode_t mode) {
-	int result;
-	instw_t instw;
-
-	REFCOUNT;
-	
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"chmod(%s,mode)\n",path);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_chmod(path,mode);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,path);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	backup (instw.truepath);
-	instw_apply(&instw);
-
-	result = true_chmod(instw.translpath, mode);
-	instw_log("%d\tchmod\t%s\t0%04o\t#%s\n",result,
-	    instw.reslvpath,mode,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int __xmknod(int version,const char *pathname, mode_t mode,dev_t *dev)
-#define INSTW_USE_XMKNOD(ver,path,mode,dev) true_xmknod((ver),(path),(mode),(dev))
-{
-	int result;
-	instw_t instw;
-	
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"mknod(%s,mode,dev)\n",pathname);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=INSTW_USE_XMKNOD(version,pathname,mode,dev);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	instw_apply(&instw);
-	backup(instw.truepath);
-
-	result=INSTW_USE_XMKNOD(version,instw.translpath,mode,dev);
-	instw_log("%d\tmknod\t%s\t#%s\n",result,instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-	
-	return result;
-}
-#undef INSTW_USE_XMKNOD
-
-/*
- *
- */
-DIR *opendir(const char *dirname) {
-	DIR *result;
-	instw_t instw;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"opendir(%s)\n",dirname);
-#endif
-	
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_opendir(dirname);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,dirname);
-	instw_makedirls(&instw);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	result=true_opendir(instw.mdirlspath);
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int __xstat(int version,const char *pathname,struct stat *info)
-{
-	int result;
-	instw_t instw;
-	int status;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"stat(%s,%p)\n",pathname,info);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=INSTW_USE_XSTAT(version,pathname,info);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-	instw_getstatus(&instw,&status);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(status&INSTW_TRANSLATED) {
-		debug(4,"\teffective stat(%s,%p)\n",
-		      instw.translpath,info);
-		result=INSTW_USE_XSTAT(version,instw.translpath,info);
-	} else {
-		debug(4,"\teffective stat(%s,%p)\n",
-		      instw.path,info);
-		result=INSTW_USE_XSTAT(version,instw.path,info);
-	}
-
-	instw_delete(&instw);
-
-	return result;	
-}
-#undef INSTW_USE_XSTAT
-
-#ifdef INSTW_HAS_LXSTAT
-int __lxstat(int version,const char *pathname,struct stat *info)
-#define INSTW_USE_LXSTAT(ver,path,info) true_lxstat(ver,path,info)
-#else
-int xstat(const char *pathname,struct stat *info)
-#define INSTW_USE_LXSTAT(ver,path,info) true_lstat(path,info)
-#endif
-{
-	int result;
-	instw_t instw;
-	int status;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"lstat(%s,%p)\n",pathname,info);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=INSTW_USE_LXSTAT(version,pathname,info);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-	instw_getstatus(&instw,&status);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(status&INSTW_TRANSLATED) {
-		debug(4,"\teffective lstat(%s,%p)\n",
-			instw.translpath,info);
-		result=INSTW_USE_LXSTAT(version,instw.translpath,info);
-	} else {
-		debug(4,"\teffective lstat(%s,%p)\n",
-			instw.path,info);
-		result=INSTW_USE_LXSTAT(version,instw.path,info);
-	}
-
-	instw_delete(&instw);
-
-	return result;	
-}
-#undef INSTW_USE_LXSTAT
-
-int symlink(const char *pathname, const char *slink) {
-	int result;
-	instw_t instw;
-	instw_t instw_slink;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"symlink(%s,%s)\n",pathname,slink);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_symlink(pathname,slink);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_new(&instw_slink);
-	instw_setpath(&instw,pathname);
-	instw_setpath(&instw_slink,slink);
-
-#if DEBUG
-	instw_print(&instw_slink);
-#endif
-
-	backup(instw_slink.truepath);
-	instw_apply(&instw_slink);
-	
-	result=true_symlink(pathname,instw_slink.translpath);
-	instw_log("%d\tsymlink\t%s\t%s\t#%s\n",
-           result,instw.path,instw_slink.reslvpath,error(result));
-
-	    
-	instw_delete(&instw);
-	instw_delete(&instw_slink);
-
-	return result;
-}
-
-int truncate(const char *path, off_t length) {
-	int result;
-	instw_t instw;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"truncate(%s,length)\n",path);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_truncate(path,length);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,path);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	backup(instw.truepath);
-	instw_apply(&instw);
-
-	result=true_truncate(instw.translpath,length);
-	instw_log("%d\ttruncate\t%s\t%d\t#%s\n",result,
-	    instw.reslvpath,(int)length,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int unlink(const char *pathname) {
-	int result;
-	instw_t instw;
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"unlink(%s)\n",pathname);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_unlink(pathname);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	backup(instw.truepath);
-	instw_apply(&instw);
-
-	result=true_unlink(instw.translpath);
-	instw_log("%d\tunlink\t%s\t#%s\n",result,instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int utime (const char *pathname, const struct utimbuf *newtimes) {
-	int result;
-	instw_t instw;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"utime(%s,newtimes)\n",pathname);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_utime(pathname,newtimes);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	backup(instw.truepath);
-	instw_apply(&instw);
-
-	result=true_utime(instw.translpath,newtimes);
-	instw_log("%d\tutime\t%s\t#%s\n",result,instw.reslvpath,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-int utimes (const char *pathname, const struct timeval *newtimes) {
-       int result;
-       instw_t instw;
-
-       if (!libc_handle)
-               initialize();
-
-#if DEBUG
-       debug(2,"utimes(%s,newtimes)\n",pathname);
-#endif
-
-         /* We were asked to work in "real" mode */
-       if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-           !(__instw.gstatus & INSTW_OKWRAP) ) {
-               result=true_utimes(pathname,newtimes);
-               return result;
-       }
-
-       instw_new(&instw);
-       instw_setpath(&instw,pathname);
-
-#if DEBUG
-       instw_print(&instw);
-#endif
-
-       backup(instw.truepath);
-       instw_apply(&instw);
-
-       result=true_utimes(instw.translpath,newtimes);
-       instw_log("%d\tutimes\t%s\t#%s\n",result,instw.reslvpath,error(result));
-
-       instw_delete(&instw);
-
-       return result;
-}
-
-#ifdef INSTW_USE_LARGEFILE64
-
-int __lxstat64(int version,const char *pathname,struct stat64 *info) {
-	int result;
-	instw_t instw;
-	int status;
-
-#if DEBUG
-	debug(2,"lstat64(%s,%p)\n",pathname,info);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_lxstat64(version,pathname,info);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,pathname);
-	instw_getstatus(&instw,&status);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	if(status&INSTW_TRANSLATED) {
-		debug(4,"\teffective lstat64(%s,%p)\n",
-			instw.translpath,info);
-		result=true_lxstat64(version,instw.translpath,info);
-	} else {
-		debug(4,"\teffective lstat64(%s,%p)\n",
-			instw.path,info);
-		result=true_lxstat64(version,instw.path,info);
-	}
-
-	instw_delete(&instw);
-
-	return result;	
-}
-
-int truncate64(const char *path, __off64_t length) {
-	int result;
-	instw_t instw;
-
-	if (!libc_handle)
-		initialize();
-
-	REFCOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"truncate64(%s,length)\n",path);
-#endif
-
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_truncate64(path,length);
-		return result;
-	}
-
-	instw_new(&instw);
-	instw_setpath(&instw,path);
-
-#if DEBUG
-	instw_print(&instw);
-#endif
-
-	backup(instw.truepath);
-	instw_apply(&instw);
-
-	result=true_truncate64(instw.translpath,length);
-	
-	instw_log("%d\ttruncate\t%s\t%d\t#%s\n",result,
-	    instw.reslvpath,(int)length,error(result));
-
-	instw_delete(&instw);
-
-	return result;
-}
-
-#endif  /* INSTW_USE_LARGEFILE64 */
-
