@@ -1,5 +1,5 @@
 AC_INIT([installwatch-port], [0.7.0beta5])
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([-Wall -Werror])
 
 
 ######################

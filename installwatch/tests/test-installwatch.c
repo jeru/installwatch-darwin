@@ -17,18 +17,36 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#include <fcntl.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <time.h>
-#include <dlfcn.h>
-
 #include "config.h"
 
-#ifndef	LIB
-	#define LIB "/usr/local/lib/installwatch.so"
+#ifdef HAVE_DLFCN_H
+#include <dlfcn.h>
+#else
+#error "Cannot find <dlfcn.h>. Do not know how to continue tests."
+#endif
+
+#ifdef HAVE_SYS_STAT_H
+#include <sys/stat.h>
+#endif
+
+#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+
+#ifdef HAVE_FCNTL_H
+#include <fcntl.h>
+#endif
+
+#ifdef HAVE_STDIO_H
+#include <stdio.h>
+#endif
+
+#ifdef HAVE_TIME_H
+#include <time.h>
+#endif
+
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
 #endif
 
 #define TESTFILE "/tmp/installwatch-test"
@@ -39,14 +57,14 @@ int *timecount;
 int passed, failed;
 void* libc_handle=NULL;
 
-void check_installwatch(void) {
+void check_installwatch(const char* libpath) {
 	char *error;
 
 	time(NULL);
 
-	libc_handle=dlopen(LIB,RTLD_LAZY);
+	libc_handle=dlopen(libpath,RTLD_LAZY);
 	if(!libc_handle) {
-		puts("Unable to open "LIB);
+		fprintf(stderr, "Unable to open %s\n", libpath);
 		exit(255);
 	}
 
@@ -71,6 +89,7 @@ void check_installwatch(void) {
 	}
 }
 
+#ifdef HAVE_CHMOD
 void test_chmod(void) {
 	int fd;
 
@@ -79,7 +98,9 @@ void test_chmod(void) {
 	chmod(TESTFILE, 0600);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_CHOWN
 void test_chown(void) {
 	int fd;
 
@@ -88,11 +109,15 @@ void test_chown(void) {
 	chown(TESTFILE, geteuid(), getegid());
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_CHROOT
 void test_chroot(void) {
 	chroot("/");
 }
+#endif
 
+#ifdef HAVE_CREAT
 void test_creat(void) {
 	int fd;
 
@@ -100,7 +125,9 @@ void test_creat(void) {
 	close(fd);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_FCHMOD
 void test_fchmod(void) {
 	int fd;
 
@@ -109,7 +136,9 @@ void test_fchmod(void) {
 	close(fd);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_FCHOWN
 void test_fchown(void) {
 	int fd;
 
@@ -118,7 +147,9 @@ void test_fchown(void) {
 	close(fd);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_FOPEN
 void test_fopen(void) {
         FILE *fd;
 
@@ -126,7 +157,9 @@ void test_fopen(void) {
         fclose(fd);
         unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_FTRUNCATE
 void test_ftruncate(void) {
 	int fd;
 
@@ -135,7 +168,9 @@ void test_ftruncate(void) {
 	close(fd);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_LCHOWN
 void test_lchown(void) {
 	int fd;
 
@@ -144,7 +179,9 @@ void test_lchown(void) {
 	lchown(TESTFILE, geteuid(), getegid());
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_LINK
 void test_link(void) {
 	int fd;
 
@@ -154,12 +191,16 @@ void test_link(void) {
 	unlink(TESTFILE);
 	unlink(TESTFILE2);
 }
+#endif
 
+#ifdef HAVE_MKDIR
 void test_mkdir(void) {
 	mkdir(TESTFILE, 0700);
 	rmdir(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_OPEN
 void test_open(void) {
 	int fd;
 
@@ -167,7 +208,9 @@ void test_open(void) {
 	close(fd);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_RENAME
 void test_rename(void) {
 	int fd;
 
@@ -176,7 +219,9 @@ void test_rename(void) {
 	rename(TESTFILE, TESTFILE2);
 	unlink(TESTFILE2);
 }
+#endif
 
+#ifdef HAVE_SYMLINK
 void test_symlink(void) {
 	int fd;
 
@@ -186,7 +231,9 @@ void test_symlink(void) {
 	unlink(TESTFILE);
 	unlink(TESTFILE2);
 }
+#endif
 
+#ifdef HAVE_TRUNCATE
 void test_truncate(void) {
 	int fd;
 
@@ -195,7 +242,9 @@ void test_truncate(void) {
 	truncate(TESTFILE, 0);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_UNLINK
 void test_unlink(void) {
 	int fd;
 
@@ -203,9 +252,9 @@ void test_unlink(void) {
 	close(fd);
 	unlink(TESTFILE);
 }
+#endif
 
-#ifdef INSTW_USE_LARGEFILE64
-
+#ifdef HAVE_CREAT64
 void test_creat64(void) {
 	int fd;
 
@@ -213,7 +262,9 @@ void test_creat64(void) {
 	close(fd);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_FOPEN64
 void test_fopen64(void) {
         FILE *fd;
 
@@ -221,7 +272,9 @@ void test_fopen64(void) {
         fclose(fd);
         unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_FTRUNCATE64
 void test_ftruncate64(void) {
 	int fd;
 
@@ -230,7 +283,9 @@ void test_ftruncate64(void) {
 	close(fd);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_OPEN64
 void test_open64(void) {
 	int fd;
 
@@ -238,7 +293,9 @@ void test_open64(void) {
 	close(fd);
 	unlink(TESTFILE);
 }
+#endif
 
+#ifdef HAVE_TRUNCATE64
 void test_truncate64(void) {
 	int fd;
 
@@ -247,7 +304,6 @@ void test_truncate64(void) {
 	truncate64(TESTFILE, 0);
 	unlink(TESTFILE);
 }
-
 #endif
 
 int do_test(const char *name, void (*function)(void), int increment) {
@@ -274,7 +330,7 @@ int do_test(const char *name, void (*function)(void), int increment) {
 int main(int argc, char **argv) {
 	struct stat statbuf;
 
-	check_installwatch();
+	check_installwatch(argv[1]);
 
 	if(stat(TESTFILE, &statbuf) != -1) {
 		printf(TESTFILE " already exists. Please remove it and run %s again\n", argv[0]);
@@ -287,39 +343,76 @@ int main(int argc, char **argv) {
 	puts("Testing installwatch " VERSION);
 	puts("Using " TESTFILE " and " TESTFILE2 " as a test files\n");
 	passed = failed = 0;
+
+#ifdef HAVE_CHMOD
 	do_test("chmod", test_chmod, 3);
+#endif
+#ifdef HAVE_CHOWN
 	do_test("chown", test_chown, 3);
+#endif
+#ifdef HAVE_CHROOT
 	do_test("chroot", test_chroot, 1);
+#endif
+#ifdef HAVE_CREAT
 	do_test("creat", test_creat, 2);
-#ifdef INSTW_USE_LARGEFILE64
+#endif
+#ifdef HAVE_CREAT64
 	do_test("creat64", test_creat64, 2);
 #endif
+#ifdef HAVE_FCHMOD
 	do_test("fchmod", test_fchmod, 3);
+#endif
+#ifdef HAVE_FCHOWN
 	do_test("fchown", test_fchown, 3);
+#endif
+#ifdef HAVE_FOPEN
 	do_test("fopen",test_fopen,2);
-#ifdef INSTW_USE_LARGEFILE64
+#endif
+#ifdef HAVE_FOPEN64
 	do_test("fopen64",test_fopen64,2);
-#endif	
+#endif
+#ifdef HAVE_FTRUNCATE
 	do_test("ftruncate", test_ftruncate, 3);
-#ifdef INSTW_USE_LARGEFILE64
+#endif
+#ifdef HAVE_FTRUNCATE64
 	do_test("ftruncate64", test_ftruncate64, 3);
 #endif
+#ifdef HAVE_LCHOWN
 	do_test("lchown", test_lchown, 3);
+#endif
+#ifdef HAVE_LINK
 	do_test("link", test_link, 4);
+#endif
+#ifdef HAVE_MKDIR
 	do_test("mkdir", test_mkdir, 2);
-	/* do_test("mknod", test_mknod, 2); */
+#endif
+#ifdef HAVE_MKNOD
+	/*do_test("mknod", test_mknod, 2);*/
+#endif
+#ifdef HAVE_OPEN
 	do_test("open", test_open, 2);
-#ifdef INSTW_USE_LARGEFILE64
+#endif
+#ifdef HAVE_OPEN64
 	do_test("open64", test_open64, 2);
 #endif
+#ifdef HAVE_RENAME
 	do_test("rename", test_rename, 3);
+#endif
+#ifdef HAVE_RMDIR
 	do_test("rmdir", test_mkdir, 2);
+#endif
+#ifdef HAVE_SYMLINK
 	do_test("symlink", test_symlink, 4);
+#endif
+#ifdef HAVE_TRUNCATE
 	do_test("truncate", test_truncate, 3);
-#ifdef INSTW_USE_LARGEFILE64
+#endif
+#ifdef HAVE_TRUNCATE64
 	do_test("truncate64", test_truncate64, 3);
 #endif
+#ifdef HAVE_UNLINK
 	do_test("unlink", test_unlink, 2);
+#endif
 
 	putchar('\n');
 	if(failed != 0) {
