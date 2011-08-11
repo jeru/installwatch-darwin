@@ -3,26 +3,15 @@
 
 #set -x
 
-PREFIX=#PREFIX#
-
-HACK="PREFIX"
-HACK="#$HACK#";
-
-if test "$PREFIX" = "$HACK" ; then
-	echo 'This script has not been installed'
-	echo 'Please run "make install"'
-	exit 1
-fi
+INJECT_ENV="@INJECT_ENV@"
 
 if `getopt -a -l 2> /dev/null`; then
 	INSTW_GNU_GETOPT=1
 fi
 
-LIBDIR=$PREFIX/lib
-
 BASE_TMP_DIR=/var/tmp
 
-INSTALLWATCH_VERSION=0.7.0beta5
+INSTALLWATCH_VERSION="@PACKAGE_VERSION@"
 
 #
 # ##############################################################################
@@ -342,18 +331,6 @@ fi
 # ##############################################################################
 #
 
-if [ "X`uname`" = "XDarwin" ]; then
-	INSTW_LD=DYLD_INSERT_LIBRARIES
-	INSTW_SHLIB_SUFFIX=.dylib
-	INSTW_OTHER_SETTINGS="export DYLD_FORCE_FLAT_NAMESPACE=1"
-else
-	INSTW_LD=LD_PRELOAD
-	INSTW_SHLIB_SUFFIX=.so
-	INSTW_OTHER_SETTINGS=
-fi
-export $INSTW_LD="$LIBDIR/installwatch$INSTW_SHLIB_SUFFIX"
-eval "$INSTW_OTHER_SETTINGS"
-
 if [ $INSTW_DBGLVL -gt 0 ]; then 
    echo "debug: INSTW_EXCLUDE=${INSTW_EXCLUDE}"
    echo "debug: INSTW_ROOTPATH=${INSTW_ROOTPATH}"
@@ -362,17 +339,12 @@ if [ $INSTW_DBGLVL -gt 0 ]; then
    echo "debug: INSTW_DBGLVL=${INSTW_DBGLVL}"
 fi
 
-eval "$@"
+eval "$INJECT_ENV $@"
 
 if [ $? -eq 0 ]; then
    FAIL=0
 else
    FAIL=1
 fi
-
-unset INSTW_SHLIB_SUFFIX
-unset INSTW_OTHER_SETTINGS
-unset $INSTW_LD
-unset INSTW_LD
 
 exit $FAIL

@@ -139,6 +139,17 @@ AC_CHECK_FUNCS([ \
 ])
 
 
+#################
+# Miscellaneous #
+#################
+
+if test "X`uname`" = "XDarwin"; then
+	INJECT_ENV='DYLD_INSERT_LIBRARIES=@INSTALLWATCH_LIBPATH@ DYLD_FORCE_FLAT_NAMESPACE=1'
+else
+	INJECT_ENV='LD_PRELOAD=@INSTALLWATCH_LIBPATH@'
+fi
+AC_SUBST(INJECT_ENV)
+
 ##########
 # output #
 ##########
