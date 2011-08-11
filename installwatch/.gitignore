@@ -4,6 +4,7 @@ test-installwatch
 aclocal.m4
 configure
 depcomp
+install-sh
 ltmain.sh
 missing
 Makefile.in

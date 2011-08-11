@@ -1013,7 +1013,7 @@ int link(const char *oldpath, const char *newpath) {
 
 #ifdef HAVE_LSTAT
 
-#   ifdef HAVE___XLSTAT
+#   ifdef HAVE___LXSTAT
 int true_lstat_impl(const char *pathname,struct stat *info) {
 	return true___lxstat(_STAT_VER,pathname,info);
 }
@@ -1065,7 +1065,7 @@ int lstat(const char *pathname,struct stat *info)
 
 #ifdef HAVE_LSTAT64
 
-#   ifdef HAVE___XLSTAT64
+#   ifdef HAVE___LXSTAT64
 int true_lstat64_impl(const char *pathname,struct stat64 *info) {
 	return true___lxstat64(_STAT_VER,pathname,info);
 }
@@ -2075,7 +2075,7 @@ int __xstat(int version,const char *pathname,struct stat *info)
 	  /* We were asked to work in "real" mode */
 	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
 	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=INSTW_USE_XSTAT(version,pathname,info);
+		result=true___xstat(version,pathname,info);
 		return result;
 	}
 
@@ -2090,11 +2090,11 @@ int __xstat(int version,const char *pathname,struct stat *info)
 	if(status&INSTW_TRANSLATED) {
 		debug(4,"\teffective xstat(%s,%p)\n",
 		      instw.translpath,info);
-		result=INSTW_USE_XSTAT(version,instw.translpath,info);
+		result=true___xstat(version,instw.translpath,info);
 	} else {
 		debug(4,"\teffective xstat(%s,%p)\n",
 		      instw.path,info);
-		result=INSTW_USE_XSTAT(version,instw.path,info);
+		result=true___xstat(version,instw.path,info);
 	}
 
 	instw_delete(&instw);
