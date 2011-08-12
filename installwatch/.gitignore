@@ -1,11 +1,10 @@
-localdecls.h
-test-installwatch
-
 aclocal.m4
+build/*
+config.guess
+config.sub
 configure
 depcomp
 install-sh
 ltmain.sh
 missing
 Makefile.in
-build/*
