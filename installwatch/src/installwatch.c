@@ -360,9 +360,16 @@ static int (*true_rename)(const char *, const char *);
 static int (*true_rmdir)(const char *);
 #endif
 #ifdef HAVE_SCANDIR
+/* Darwin uses a non-standard interface of "scandir" */
+#	if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+static int (*true_scandir)(	const char *,struct dirent ***,
+				int (*)(struct dirent *),
+				int (*)(const void *,const void *));
+#	else
 static int (*true_scandir)(	const char *,struct dirent ***,
 				int (*)(const struct dirent *),
-				int (*)(const void *,const void *));
+				int (*)(const struct dirent **,const struct dirent **));
+#	endif
 #endif
 #ifdef HAVE_SCANDIR64
 static int (*true_scandir64)(	const char *,struct dirent64 ***,
@@ -735,7 +742,7 @@ FILE *fopen(const char *pathname, const char *mode) {
 	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') {
 		backup(instw.truepath);
 		instw_apply(&instw);
-		instw_log("%d\tfopen\t%s\t#%s\n",(int)result,
+		instw_log("%p\tfopen\t%s\t#%s\n",result,
 		    instw.reslvpath,error(result));
 	}
 
@@ -750,7 +757,7 @@ FILE *fopen(const char *pathname, const char *mode) {
 	}
 	
 	if(mode[0]=='w'||mode[0]=='a'||mode[1]=='+') 
-		instw_log("%d\tfopen\t%s\t#%s\n",(int)result,
+		instw_log("%p\tfopen\t%s\t#%s\n",result,
 		    instw.reslvpath,error(result));
 
 	instw_delete(&instw);
@@ -1514,14 +1521,8 @@ int scandir(const char *dir,struct dirent ***namelist,
 
 #ifdef HAVE_SCANDIR64
 int scandir64(const char *dir,struct dirent64 ***namelist,
-#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
-		int (*select)(struct dirent64 *),
-		int (*compar)(const void *,const void *)
-#else
 		int (*select)(const struct dirent64 *),
-		int (*compar)(const struct dirent64 **,const struct dirent64 **)
-#endif
-) {
+		int (*compar)(const struct dirent64 **,const struct dirent64 **)) {
 	int result;
 
 	instw__ensure_init();
@@ -2252,7 +2253,7 @@ static int vlambda_log(const char *logname,const char *format,va_list ap) {
 				logname,buffer,strerror(errno));
 		}
 	} else {
-		syslog(LOGLEVEL,buffer);
+		syslog(LOGLEVEL, "%s", buffer);
 	}	
 
 	return rcod;
@@ -2708,29 +2709,32 @@ int parse_suffix(char *pnp,char *pns,const char *suffix) {
 static int __instw_printdirent(struct dirent *entry) {
 
 	if(entry!=NULL) {
+#ifdef linux
 		debug(	4,
 			"entry(%p) {\n"
 			"\td_ino     : %ld\n"
-#ifdef linux
 			"\td_off     : %ld\n"
 			"\td_reclen  : %d\n"
 			"\td_type    : %d\n"
 			"\td_name    : \"%.*s\"\n",
-#else
-			"\td_name    : \"%s\"\n",
-#endif
 			entry,
 			entry->d_ino,
-#ifdef linux
 			entry->d_off,
 			entry->d_reclen,
 			(int)entry->d_type,
 			(int)entry->d_reclen,(char*)(entry->d_name)
-#else
-			(char*)(entry->d_name)
-#endif
-			
 			);
+#else  /* linux */
+		/* TODO: find a more portable way to output "entry->d_ino". */
+		debug(	4,
+			"entry(%p) {\n"
+			"\td_ino     : %llu\n"
+			"\td_name    : \"%s\"\n",
+			entry,
+			(unsigned long long int)entry->d_ino,
+			entry->d_name
+			);
+#endif  /* linux */
 	} else {
 		debug(	4,"entry(null) \n");
 	}
