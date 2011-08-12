@@ -96,6 +96,20 @@
 #include <dirent.h>
 #endif
 
+#if HAVE_CREAT64 \
+|| HAVE_FOPEN64 \
+|| HAVE_FTRUNCATE64 \
+|| HAVE_LSTAT64 \
+|| HAVE_OPEN64 \
+|| HAVE_READDIR64 \
+|| HAVE_SCANDIR64 \
+|| HAVE_STAT64 \
+|| HAVE_TRUNCATE64 \
+|| HAVE___LXSTAT64 \
+|| HAVE___XSTAT64
+#	define HAVE_64 1
+#endif
+
 #define LOGLEVEL (LOG_USER | LOG_INFO | LOG_PID)
 #define BUFSIZE 1024
 
@@ -200,13 +214,15 @@ int parse_suffix(char *,char *,const char *);
 #define finalize(code) {rcod=code;goto finalize;}
 
 #ifndef NDEBUG
+#	ifdef HAVE_READDIR
 static int __instw_printdirent(struct dirent*);
-#ifdef INSTW_USE_LARGEFILE64
+#	endif
+#	ifdef HAVE_READDIR64
 static int __instw_printdirent64(struct dirent64*);
-#endif
+#	endif
 #endif
 
-#ifdef DEBUG
+#ifndef NDEBUG
 static int instw_print(instw_t *);
 #endif
 static int instw_init(void);
@@ -2286,7 +2302,7 @@ static inline int instw_log(const char *format,...) {
 
 static inline int debug(int dbglvl,const char *format,...) {
 	int rcod=0; 
-#ifdef DEBUG
+#ifndef NDEBUG
 	char *logname;
 	va_list ap;
 
@@ -2299,7 +2315,6 @@ static inline int debug(int dbglvl,const char *format,...) {
 	rcod=vlambda_log(logname,format,ap);
 	va_end(ap);
 #endif	
-
 	return rcod;
 }
 
@@ -2689,6 +2704,7 @@ int parse_suffix(char *pnp,char *pns,const char *suffix) {
  * *****************************************************************************
  */
 
+#ifdef HAVE_READDIR
 static int __instw_printdirent(struct dirent *entry) {
 
 	if(entry!=NULL) {
@@ -2721,8 +2737,9 @@ static int __instw_printdirent(struct dirent *entry) {
 
 	return 0;
 }
+#endif  /* HAVE_READDIR */
 
-#ifdef INSTW_USE_LARGEFILE64
+#ifdef HAVE_READDIR64
 static int __instw_printdirent64(struct dirent64 *entry) {
 
 	if(entry!=NULL) {
@@ -2754,13 +2771,13 @@ static int __instw_printdirent64(struct dirent64 *entry) {
 
 	return 0;
 }
-#endif  /* INSTW_USE_LARGEFILE64 */
+#endif  /* HAVE_READDIR64 */
 
 /*
  * *****************************************************************************
  */
 
-#ifdef DEBUG
+#ifndef NDEBUG
 static int instw_print(instw_t *instw) {
 	string_t *pnext;
 	int i;
@@ -3819,40 +3836,40 @@ static int backup(const char *path) {
 
 	  /* INSTW_OKBACKUP not set, we won't do any backups */
 	if (!(__instw.gstatus&INSTW_OKBACKUP)) {
-		#ifdef DEBUG
+#ifndef NDEBUG
 		debug(3,"Backup not enabled, path: %s\n", path);
-		#endif
+#endif
 		return 0;
 	}
 
 	/* Check if this is inside /dev */
 	if (strstr (path, "/dev") == path) {
-		#ifndef NDEBUG
+#ifndef NDEBUG
 		debug(3,"%s is inside /dev. Ignoring.\n", path);
-		#endif
+#endif
 		return 0; 
 	}
 
 	/* Now check for /tmp */
 	if (strstr (path, "/tmp") == path) {
-		#ifndef NDEBUG
+#ifndef NDEBUG
 		debug(3,"%s is inside /tmp. Ignoring.\n", path);
-		#endif
+#endif
 		return 0; 
 	}
 
 	/* Finally, the backup path itself */
 	if (strstr (path,__instw.backup ) == path) {
-		#ifndef NDEBUG
+#ifndef NDEBUG
 		debug(3,"%s is inside the backup path. Ignoring.\n", path);
-		#endif
+#endif
 		return 0; 
 	}
 
 	/* Does it exist already? */
-	#ifndef NDEBUG
+#ifndef NDEBUG
 	debug(3,"Exists %s?\n", path);
-	#endif
+#endif
 	if (true_stat(path, &inode) < 0) {
 
 		/* It doesn't exist, we'll tag it so we won't back it up  */
@@ -3867,9 +3884,9 @@ static int backup(const char *path) {
 		placeholder = true_creat(backup_path, S_IREAD);  
 		if (!(placeholder < 0)) close (placeholder);
 
-		#ifndef NDEBUG
+#ifndef NDEBUG
 		debug(3,"does not exist\n");
-		#endif
+#endif
 		return 0;
 	}
 
@@ -3880,16 +3897,16 @@ static int backup(const char *path) {
 	strcat (backup_path, path);
 
 	if (true_stat (backup_path, &backup_inode) >= 0) {
-		#ifndef NDEBUG
+#ifndef NDEBUG
 		debug(3,"%s must not be backed up\n", backup_path);
-		#endif
+#endif
 		return 0;
 	}
 
 
-	#ifndef NDEBUG
+#ifndef NDEBUG
 	debug(3,"Si existe, veamos de que tipo es.\n");
-	#endif
+#endif
 
 	/* Append the path to the backup_path */
 	strcpy (backup_path,__instw.backup);
