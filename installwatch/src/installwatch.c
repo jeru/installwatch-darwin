@@ -96,8 +96,6 @@
 #include <dirent.h>
 #endif
 
-#define DEBUG 1  
-
 #define LOGLEVEL (LOG_USER | LOG_INFO | LOG_PID)
 #define BUFSIZE 1024
 
@@ -201,7 +199,7 @@ int parse_suffix(char *,char *,const char *);
   /* single method used to minimize excessive returns */
 #define finalize(code) {rcod=code;goto finalize;}
 
-#if DEBUG
+#ifndef NDEBUG
 static int __instw_printdirent(struct dirent*);
 #ifdef INSTW_USE_LARGEFILE64
 static int __instw_printdirent64(struct dirent64*);
@@ -402,6 +400,18 @@ static int (*true___xstat64)(int,const char *, struct stat64 *);
 #endif
 
 /*
+ * Some utility functions of "__instw".
+ */
+static inline bool instw__in_real_mode() {
+	return !(__instw.gstatus & INSTW_INITIALIZED)
+		|| !(__instw.gstatus & INSTW_OKWRAP);
+}
+
+static inline bool instw__ensure_init() {
+	if (!libc_handle) initialize();
+}
+
+/*
  * Injected functions implementation.
  */
 
@@ -410,24 +420,20 @@ int access (const char *pathname, int type) {
        int result;
        instw_t instw;
 
-       if (!libc_handle)
-          initialize();
+       instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
        debug(2,"access(%s,%d)\n",pathname,type);
 #endif
 
-         /* We were asked to work in "real" mode */
-       if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-           !(__instw.gstatus & INSTW_OKWRAP) ) {
-               result=true_access(pathname,type);
-               return result;
-       }
+       /* We were asked to work in "real" mode */
+       if (instw__in_real_mode())
+	       return true_access(pathname, type);
 
        instw_new(&instw);
        instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
        instw_print(&instw);
 #endif
 
@@ -449,19 +455,15 @@ int chdir(const char *pathname) {
 	instw_t instw;
 	int status;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"chdir(%s)n",pathname);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_chdir(pathname);
-		return result;
-	}    
+	/* We were asked to work in "real" mode */
+       if (instw__in_real_mode())
+	       return true_chdir(pathname);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
@@ -488,24 +490,20 @@ int chmod(const char *path, mode_t mode) {
 
 	REFCOUNT;
 	
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"chmod(%s,mode)\n",path);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_chmod(path,mode);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_chmod(path,mode);
 
 	instw_new(&instw);
 	instw_setpath(&instw,path);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -529,24 +527,20 @@ int chown(const char *path, uid_t owner, gid_t group) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"chown(%s,owner,group)\n",path);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_chown(path,owner,group);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_chown(path,owner,group);
 
 	instw_new(&instw);
 	instw_setpath(&instw,path);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -570,10 +564,9 @@ int chroot(const char *path) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"chroot(%s)\n",path);
 #endif
 
@@ -596,24 +589,20 @@ int creat(const char *pathname, mode_t mode) {
 	
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"creat(%s,mode)\n",pathname);
 #endif
 	
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_creat(pathname,mode);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_creat(pathname,mode);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -637,24 +626,20 @@ int creat64(const char *pathname, __mode_t mode) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"creat64(%s,mode)\n",pathname);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_creat64(pathname,mode);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_creat64(pathname,mode);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -676,10 +661,9 @@ int fchmod(int filedes, mode_t mode) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"fchmod\n");
 #endif
 
@@ -695,10 +679,9 @@ int fchown(int fd, uid_t owner, gid_t group) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"fchown\n");
 #endif
 
@@ -716,24 +699,20 @@ FILE *fopen(const char *pathname, const char *mode) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"fopen(%s,%s)\n",pathname,mode);
 #endif
 
 	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_fopen(pathname,mode);
-		return result;
-	}
+	if (instw__in_real_mode())
+		return true_fopen(pathname,mode);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -772,24 +751,20 @@ FILE *fopen64(const char *pathname, const char *mode) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"fopen64(%s,%s)\n",pathname,mode);
 #endif
 	
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_fopen64(pathname,mode);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_fopen64(pathname,mode);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -824,10 +799,9 @@ int ftruncate(int fd, off_t length) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"ftruncate\n");
 #endif
 
@@ -843,10 +817,9 @@ int ftruncate64(int fd, __off64_t length) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"ftruncate64\n");
 #endif
 
@@ -863,19 +836,15 @@ char *getcwd(char *buffer,size_t size) {
 	char *wptr;
 	size_t wsize;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"getcwd(%p,%ld)\n",buffer,(long int)size);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_getcwd(buffer,size);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_getcwd(buffer,size);
 
 	if(	__instw.gstatus&INSTW_INITIALIZED &&
 		__instw.gstatus&INSTW_OKTRANSL && 
@@ -913,7 +882,7 @@ char *getcwd(char *buffer,size_t size) {
 		result=true_getcwd(buffer,size);
 	}
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(3,"\teffective getcwd(%s,%ld)\n",
 	      (result?buffer:"(null)"),(long int)size);
 #endif	
@@ -930,24 +899,20 @@ int lchown(const char *path, uid_t owner, gid_t group) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"lchown(%s,owner,group)\n",path);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_lchown(path,owner,group);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_lchown(path,owner,group);
 
 	instw_new(&instw);
 	instw_setpath(&instw,path);
 	
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -972,26 +937,22 @@ int link(const char *oldpath, const char *newpath) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"link(%s,%s)\n",oldpath,newpath);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_link(oldpath,newpath);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_link(oldpath,newpath);
 
 	instw_new(&instw_o);
 	instw_new(&instw_n);
 	instw_setpath(&instw_o,oldpath);
 	instw_setpath(&instw_n,newpath);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw_o);
 	instw_print(&instw_n);
 #endif
@@ -1025,25 +986,21 @@ int lstat(const char *pathname,struct stat *info)
 	instw_t instw;
 	int status;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"lstat(%s,%p)\n",pathname,info);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_lstat(pathname,info);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_lstat(pathname,info);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	instw_getstatus(&instw,&status);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1076,22 +1033,19 @@ int lstat64(const char *pathname,struct stat64 *info) {
 	instw_t instw;
 	int status;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"lstat64(%s,%p)\n",pathname,info);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_lstat64(pathname,info);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_lstat64(pathname,info);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	instw_getstatus(&instw,&status);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1118,24 +1072,20 @@ int mkdir(const char *pathname, mode_t mode) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"mkdir(%s,mode)\n",pathname);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_mkdir(pathname,mode);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_mkdir(pathname,mode);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1165,24 +1115,20 @@ int mknod(const char *pathname, mode_t mode,dev_t dev)
 	
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"mknod(%s,mode,dev)\n",pathname);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_mknod(pathname,mode,dev);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_mknod(pathname,mode,dev);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1209,10 +1155,9 @@ int open(const char *pathname, int flags, ...) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"open(%s,%d,mode)\n",pathname,flags);
 #endif
 
@@ -1229,17 +1174,14 @@ int open(const char *pathname, int flags, ...) {
 		mode = 0;
 	}
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_open(pathname,flags,mode);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_open(pathname,flags,mode);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1275,10 +1217,9 @@ int open64(const char *pathname, int flags, ...) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"open64(%s,%d,mode)\n",pathname,flags);
 #endif
 
@@ -1286,17 +1227,14 @@ int open64(const char *pathname, int flags, ...) {
 	mode = va_arg(ap, mode_t);
 	va_end(ap);
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_open64(pathname,flags,mode);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_open64(pathname,flags,mode);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1330,25 +1268,21 @@ DIR *opendir(const char *dirname) {
 	DIR *result;
 	instw_t instw;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"opendir(%s)\n",dirname);
 #endif
 	
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_opendir(dirname);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_opendir(dirname);
 
 	instw_new(&instw);
 	instw_setpath(&instw,dirname);
 	instw_makedirls(&instw);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1364,23 +1298,19 @@ DIR *opendir(const char *dirname) {
 struct dirent *readdir(DIR *dir) {
 	struct dirent *result;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(3,"readdir(%p)\n",dir);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_readdir(dir);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_readdir(dir);
 
 	result=true_readdir(dir);
 
-#if DEBUG
+#ifndef NDEBUG
 	__instw_printdirent(result);
 #endif
 
@@ -1392,23 +1322,19 @@ struct dirent *readdir(DIR *dir) {
 struct dirent64 *readdir64(DIR *dir) {
 	struct dirent64 *result;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(3,"readdir64(%p)\n",dir);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_readdir64(dir);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_readdir64(dir);
 
 	result=true_readdir64(dir);
 
-#if DEBUG
+#ifndef NDEBUG
 	__instw_printdirent64(result);
 #endif
 
@@ -1422,25 +1348,21 @@ ssize_t readlink(const char *path,char *buf,size_t bufsiz) {
 	instw_t instw;
 	int status;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"readlink(\"%s\",%p,%ld)\n",path,buf,(long int)bufsiz);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_readlink(path,buf,bufsiz);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_readlink(path,buf,bufsiz);
 
 	instw_new(&instw);
 	instw_setpath(&instw,path);
 	instw_getstatus(&instw,&status);
 	
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1459,15 +1381,11 @@ ssize_t readlink(const char *path,char *buf,size_t bufsiz) {
 char *realpath(const char *file_name,char *resolved_name) {
 	char *result;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_realpath(file_name,resolved_name);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_realpath(file_name,resolved_name);
 
 	result=true_realpath(file_name,resolved_name);
 
@@ -1483,26 +1401,22 @@ int rename(const char *oldpath, const char *newpath) {
 
 	REFCOUNT;
 	
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"rename(\"%s\",\"%s\")\n",oldpath,newpath);	
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_rename(oldpath,newpath);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_rename(oldpath,newpath);
 
 	instw_new(&oldinstw);
 	instw_new(&newinstw);
 	instw_setpath(&oldinstw,oldpath);
 	instw_setpath(&newinstw,newpath);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&oldinstw);
 	instw_print(&newinstw);
 #endif
@@ -1529,19 +1443,15 @@ int rmdir(const char *pathname) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"rmdir(%s)\n",pathname);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_rmdir(pathname);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_rmdir(pathname);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
@@ -1570,19 +1480,15 @@ int scandir(const char *dir,struct dirent ***namelist,
 ) {
 	int result;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"scandir(%s,%p,%p,%p)\n",dir,namelist,select,compar);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_scandir(dir,namelist,select,compar);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_scandir(dir,namelist,select,compar);
 
 	result=true_scandir(dir,namelist,select,compar);
 
@@ -1602,19 +1508,15 @@ int scandir64(const char *dir,struct dirent64 ***namelist,
 ) {
 	int result;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"scandir64(%s,%p,%p,%p)\n",dir,namelist,select,compar);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_scandir64(dir,namelist,select,compar);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_scandir64(dir,namelist,select,compar);
 
 	result=true_scandir64(dir,namelist,select,compar);
 
@@ -1636,25 +1538,21 @@ int stat(const char *pathname,struct stat *info)
 	instw_t instw;
 	int status;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"stat(%s,%p)\n",pathname,info);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_stat(pathname,info);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_stat(pathname,info);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	instw_getstatus(&instw,&status);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1685,26 +1583,22 @@ int symlink(const char *pathname, const char *slink) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"symlink(%s,%s)\n",pathname,slink);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_symlink(pathname,slink);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_symlink(pathname,slink);
 
 	instw_new(&instw);
 	instw_new(&instw_slink);
 	instw_setpath(&instw,pathname);
 	instw_setpath(&instw_slink,slink);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw_slink);
 #endif
 
@@ -1724,6 +1618,17 @@ int symlink(const char *pathname, const char *slink) {
 #endif  /* HAVE_SYMLINK */
 
 #ifdef HAVE_TIME
+time_t time (time_t *timer) {
+	TIMECOUNT;
+
+	instw__ensure_init();
+
+#ifndef NDEBUG
+	debug(2,"time\n");
+#endif
+
+	return true_time(timer);
+}
 #endif  /* HAVE_TIME */
 
 #ifdef HAVE_TRUNCATE
@@ -1733,24 +1638,20 @@ int truncate(const char *path, off_t length) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"truncate(%s,length)\n",path);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_truncate(path,length);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_truncate(path,length);
 
 	instw_new(&instw);
 	instw_setpath(&instw,path);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1772,29 +1673,24 @@ int truncate64(const char *path, __off64_t length) {
 	int result;
 	instw_t instw;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"truncate64(%s,length)\n",path);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_truncate64(path,length);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_truncate64(path,length);
 
 	instw_new(&instw);
 	instw_setpath(&instw,path);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1819,24 +1715,20 @@ int unlink(const char *pathname) {
 
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"unlink(%s)\n",pathname);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_unlink(pathname);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_unlink(pathname);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1857,24 +1749,20 @@ int utime (const char *pathname, const struct utimbuf *newtimes) {
 	int result;
 	instw_t instw;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"utime(%s,newtimes)\n",pathname);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true_utime(pathname,newtimes);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_utime(pathname,newtimes);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1895,24 +1783,20 @@ int utimes (const char *pathname, const struct timeval *newtimes) {
        int result;
        instw_t instw;
 
-       if (!libc_handle)
-               initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
        debug(2,"utimes(%s,newtimes)\n",pathname);
 #endif
 
-         /* We were asked to work in "real" mode */
-       if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-           !(__instw.gstatus & INSTW_OKWRAP) ) {
-               result=true_utimes(pathname,newtimes);
-               return result;
-       }
+       /* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true_utimes(pathname,newtimes);
 
        instw_new(&instw);
        instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
        instw_print(&instw);
 #endif
 
@@ -1938,25 +1822,21 @@ int __lxstat(int version,const char *pathname,struct stat *info)
 	instw_t instw;
 	int status;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"lstat(%s,%p)\n",pathname,info);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true___lxstat(version,pathname,info);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true___lxstat(version,pathname,info);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	instw_getstatus(&instw,&status);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -1982,22 +1862,19 @@ int __lxstat64(int version,const char *pathname,struct stat64 *info) {
 	instw_t instw;
 	int status;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"lstat64(%s,%p)\n",pathname,info);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true___lxstat64(version,pathname,info);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true___lxstat64(version,pathname,info);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	instw_getstatus(&instw,&status);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -2025,24 +1902,20 @@ int __xmknod(int version,const char *pathname, mode_t mode,dev_t *dev)
 	
 	REFCOUNT;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"mknod(%s,mode,dev)\n",pathname);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true___xmknod(version,pathname,mode,dev);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true___xmknod(version,pathname,mode,dev);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -2065,25 +1938,21 @@ int __xstat(int version,const char *pathname,struct stat *info)
 	instw_t instw;
 	int status;
 
-	if (!libc_handle)
-		initialize();
+	instw__ensure_init();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"xstat(%s,%p)\n",pathname,info);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true___xstat(version,pathname,info);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true___xstat(version,pathname,info);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	instw_getstatus(&instw,&status);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -2109,22 +1978,19 @@ int __xstat64(int version,const char *pathname,struct stat64 *info) {
 	instw_t instw;
 	int status;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"stat64(%s,%p)\n",pathname,info);
 #endif
 
-	  /* We were asked to work in "real" mode */
-	if( !(__instw.gstatus & INSTW_INITIALIZED) ||
-	    !(__instw.gstatus & INSTW_OKWRAP) ) {
-		result=true___xstat64(version,pathname,info);
-		return result;
-	}
+	/* We were asked to work in "real" mode */
+	if (instw__in_real_mode())
+		return true___xstat64(version,pathname,info);
 
 	instw_new(&instw);
 	instw_setpath(&instw,pathname);
 	instw_getstatus(&instw,&status);
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(&instw);
 #endif
 
@@ -2466,7 +2332,7 @@ int canonicalize(const char *path, char *resolved_path) {
 
 	reset_okwrap();
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(4,"canonicalize(%s,%s)\n",path,resolved_path);
 #endif
 
@@ -2479,7 +2345,7 @@ static int make_path (const char *path) {
 
 	int i = 0;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"===== make_path: %s\n", path);
 #endif
 
@@ -2528,7 +2394,7 @@ static int copy_path(const char *truepath,const char *translroot) {
 	char linkpath[PATH_MAX+1];
 	size_t linksz;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"copy_path(%s,%s)\n",truepath,translroot);
 #endif
 
@@ -2662,7 +2528,7 @@ static int unlink_recursive(const char *truepath) {
 	char wpath[PATH_MAX+1];
 	struct stat winfo;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"unlink_recursive(%s)\n",truepath);
 #endif
 
@@ -2735,7 +2601,7 @@ int expand_path(string_t **list,const char *prefix,const char *suffix) {
 	char pns[PATH_MAX+1];
 	size_t len;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(4,"expand_path(%p,%s,%s)\n",list,prefix,suffix);
 #endif
 
@@ -2993,7 +2859,7 @@ static int instw_init(void) {
 	int oktransl;
 	int okwrap;
 
-#if DEBUG
+#ifndef NDEBUG
 	  /*
 	   * We set the requested dynamic debug level
 	   */
@@ -3191,7 +3057,7 @@ static int instw_init(void) {
 	if(okbackup) __instw.gstatus |= INSTW_OKBACKUP;
 	if(oktransl) __instw.gstatus |= INSTW_OKTRANSL;	
 	
-#if DEBUG
+#ifndef NDEBUG
 	debug(4,"__instw(%p)\n",&__instw);
 	instw_print(&__instw);
 #endif
@@ -3212,7 +3078,7 @@ static int instw_fini(void) {
 	string_t *pnext;
 	string_t *pthis;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"instw_fini()\n");
 #endif
 
@@ -3325,7 +3191,7 @@ static int instw_setmetatransl(instw_t *instw) {
 	int i=0;
 	string_t *pthis;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(3,"instw_setmetatransl(%p)\n",instw);
 	instw_print(instw);
 #endif
@@ -3339,7 +3205,7 @@ static int instw_setmetatransl(instw_t *instw) {
 		expand_path(&(instw->equivpaths),"",instw->reslvpath);
 	}	
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(instw);
 #endif
 
@@ -3393,7 +3259,7 @@ static int instw_setpath(instw_t *instw,const char *path) {
 	size_t trlen;
 	size_t melen;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"instw_setpath(%p,%s)\n",instw,path);
 #endif
 
@@ -3493,7 +3359,7 @@ static int instw_getstatus(instw_t *instw,int *status) {
 	struct stat rinode;
 	struct stat tinode;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"instw_getstatus(%p,%p)\n",instw,status);
 #endif
 
@@ -3585,7 +3451,7 @@ static int instw_apply(instw_t *instw) {
 	char linkpath[PATH_MAX+1];
 
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"instw_apply(%p)\n",instw);
 	instw_print(instw);
 #endif
@@ -3681,7 +3547,7 @@ static int instw_filldirls(instw_t *instw) {
 	instw_t iw_entry;
 	int status=0;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"instw_filldirls(%p)\n",instw);
 #endif
 
@@ -3708,7 +3574,7 @@ static int instw_filldirls(instw_t *instw) {
 			if((wsz=true_readlink(spath,lpath,PATH_MAX))>=0) { 
 				lpath[wsz]='\0';
 				true_symlink(lpath,dpath); 
-#if DEBUG
+#ifndef NDEBUG
 				debug(4,"\tfilled symlink       : %s\n",dpath);
 #endif
 			}
@@ -3719,7 +3585,7 @@ static int instw_filldirls(instw_t *instw) {
 		if(S_ISREG(sinfo.st_mode)) {
 			if((wfd=true_creat(dpath,sinfo.st_mode))>=0) {
 				close(wfd); 
-#if DEBUG
+#ifndef NDEBUG
 				debug(4,"\tfilled regular file  : %s\n",dpath);
 #endif
 			}
@@ -3728,7 +3594,7 @@ static int instw_filldirls(instw_t *instw) {
 		  /* directory */
 		if(S_ISDIR(sinfo.st_mode)) {
 			true_mkdir(dpath,sinfo.st_mode);
-#if DEBUG
+#ifndef NDEBUG
 			debug(4,"\tfilled directory     : %s\n",dpath);
 #endif
 
@@ -3737,7 +3603,7 @@ static int instw_filldirls(instw_t *instw) {
 		  /* block special file */
 		if(S_ISBLK(sinfo.st_mode)) {
 			true_mknod(dpath,sinfo.st_mode|S_IFBLK,sinfo.st_rdev);
-#if DEBUG
+#ifndef NDEBUG
 			debug(4,"\tfilled special block : %s\n",dpath);
 #endif
 
@@ -3746,7 +3612,7 @@ static int instw_filldirls(instw_t *instw) {
 		  /* character special file */
 		if(S_ISCHR(sinfo.st_mode)) {
 			true_mknod(dpath,sinfo.st_mode|S_IFCHR,sinfo.st_rdev);
-#if DEBUG
+#ifndef NDEBUG
 			debug(4,"\tfilled special char  : %s\n",dpath);
 #endif
 		}
@@ -3754,7 +3620,7 @@ static int instw_filldirls(instw_t *instw) {
 		  /* fifo special file */
 		if(S_ISFIFO(sinfo.st_mode)) {
 			true_mknod(dpath,sinfo.st_mode|S_IFIFO,0);
-#if DEBUG
+#ifndef NDEBUG
 			debug(4,"\tfilled special fifo  : %s\n",dpath);
 #endif
 		}
@@ -3799,7 +3665,7 @@ static int instw_filldirls(instw_t *instw) {
 			if((wsz=true_readlink(spath,lpath,PATH_MAX))>=0) {
 				lpath[wsz]='\0';
 				true_symlink(lpath,dpath);
-#if DEBUG
+#ifndef NDEBUG
 				debug(4,"\tfilled symlink       : %s\n",dpath);
 #endif
 			}
@@ -3809,7 +3675,7 @@ static int instw_filldirls(instw_t *instw) {
 		if(S_ISREG(sinfo.st_mode)) {
 			if((wfd=true_creat(dpath,sinfo.st_mode))>=0) {
 				close(wfd); 
-#if DEBUG
+#ifndef NDEBUG
 				debug(4,"\tfilled regular file  : %s\n",dpath);
 #endif
 			}	
@@ -3818,7 +3684,7 @@ static int instw_filldirls(instw_t *instw) {
 		  /* directory */
 		if(S_ISDIR(sinfo.st_mode)) {
 			true_mkdir(dpath,sinfo.st_mode);
-#if DEBUG
+#ifndef NDEBUG
 			debug(4,"\tfilled directory     : %s\n",dpath);
 #endif
 		}
@@ -3826,7 +3692,7 @@ static int instw_filldirls(instw_t *instw) {
 		  /* block special file */
 		if(S_ISBLK(sinfo.st_mode)) {
 			true_mknod(dpath,sinfo.st_mode|S_IFBLK,sinfo.st_rdev);
-#if DEBUG
+#ifndef NDEBUG
 			debug(4,"\tfilled special block : %s\n",dpath);
 #endif
 		}
@@ -3834,7 +3700,7 @@ static int instw_filldirls(instw_t *instw) {
 		  /* character special file */
 		if(S_ISCHR(sinfo.st_mode)) {
 			true_mknod(dpath,sinfo.st_mode|S_IFCHR,sinfo.st_rdev);
-#if DEBUG
+#ifndef NDEBUG
 			debug(4,"\tfilled special char  : %s\n",dpath);
 #endif
 		}
@@ -3842,7 +3708,7 @@ static int instw_filldirls(instw_t *instw) {
 		  /* fifo special file */
 		if(S_ISFIFO(sinfo.st_mode)) {
 			true_mknod(dpath,sinfo.st_mode|S_IFIFO,0);
-#if DEBUG
+#ifndef NDEBUG
 			debug(4,"\tfilled special fifo  : %s\n",dpath);
 #endif
 		}
@@ -3878,7 +3744,7 @@ static int instw_makedirls(instw_t *instw) {
 	struct stat dirlsinfo;
 	char wdirname[NAME_MAX+1];
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"instw_makedirls(%p)\n",instw);
 #endif
 
@@ -3928,7 +3794,7 @@ static int instw_makedirls(instw_t *instw) {
 		}
 	}
 
-#if DEBUG
+#ifndef NDEBUG
 	instw_print(instw);
 #endif
 
@@ -3947,7 +3813,7 @@ static int backup(const char *path) {
 	struct stat inode,backup_inode;
 	struct utimbuf timbuf;
 
-#if DEBUG
+#ifndef NDEBUG
 	debug(2,"========= backup () =========  path: %s\n", path); 
 #endif
 
@@ -3961,7 +3827,7 @@ static int backup(const char *path) {
 
 	/* Check if this is inside /dev */
 	if (strstr (path, "/dev") == path) {
-		#if DEBUG
+		#ifndef NDEBUG
 		debug(3,"%s is inside /dev. Ignoring.\n", path);
 		#endif
 		return 0; 
@@ -3969,7 +3835,7 @@ static int backup(const char *path) {
 
 	/* Now check for /tmp */
 	if (strstr (path, "/tmp") == path) {
-		#if DEBUG
+		#ifndef NDEBUG
 		debug(3,"%s is inside /tmp. Ignoring.\n", path);
 		#endif
 		return 0; 
@@ -3977,14 +3843,14 @@ static int backup(const char *path) {
 
 	/* Finally, the backup path itself */
 	if (strstr (path,__instw.backup ) == path) {
-		#if DEBUG
+		#ifndef NDEBUG
 		debug(3,"%s is inside the backup path. Ignoring.\n", path);
 		#endif
 		return 0; 
 	}
 
 	/* Does it exist already? */
-	#if DEBUG
+	#ifndef NDEBUG
 	debug(3,"Exists %s?\n", path);
 	#endif
 	if (true_stat(path, &inode) < 0) {
@@ -4001,7 +3867,7 @@ static int backup(const char *path) {
 		placeholder = true_creat(backup_path, S_IREAD);  
 		if (!(placeholder < 0)) close (placeholder);
 
-		#if DEBUG
+		#ifndef NDEBUG
 		debug(3,"does not exist\n");
 		#endif
 		return 0;
@@ -4014,14 +3880,14 @@ static int backup(const char *path) {
 	strcat (backup_path, path);
 
 	if (true_stat (backup_path, &backup_inode) >= 0) {
-		#if DEBUG
+		#ifndef NDEBUG
 		debug(3,"%s must not be backed up\n", backup_path);
 		#endif
 		return 0;
 	}
 
 
-	#if DEBUG
+	#ifndef NDEBUG
 	debug(3,"Si existe, veamos de que tipo es.\n");
 	#endif
 
@@ -4056,17 +3922,4 @@ static int backup(const char *path) {
 	}
 	
 	return 0;
-}
-
-time_t time (time_t *timer) {
-	TIMECOUNT;
-
-	if (!libc_handle)
-		initialize();
-
-#if DEBUG
-	debug(2,"time\n");
-#endif
-
-return true_time(timer);
 }
